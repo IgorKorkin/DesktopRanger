@@ -6,6 +6,8 @@
 
 The project demonstrates how Windows Desktop and Window Station objects can be used to create a protected environment for sensitive applications and reduce exposure to local user-mode input interception.
 
+This repository contains a **limited public release** focused on the defensive prototype. A separate private research version is maintained for internal development and contains additional implementation details, evaluation materials, test harnesses, experimental logs, and unpublished research artifacts.
+
 Repository:
 
 ```text
@@ -14,35 +16,33 @@ https://github.com/IgorKorkin/DesktopRanger
 
 ## Release
 
-Pass the SALT 2026 public prototype release:
+Public prototype release:
 
 ```text
 https://github.com/IgorKorkin/DesktopRanger/releases/tag/v0.1-pts-2026
 ```
 
-The release includes source code and a CI-built Windows x64 binary:
-
-```text
-DesktopRanger-v0.1-pts-2026-win-x64.zip
-```
-
-SHA-256:
-
-```text
-3a272b4438314bd38141c338b861602b3d59fe37682d27bd0b66b1acb1af3871
-```
+The release includes source code and a CI-built Windows x64 binary.
 
 ## Scope
 
-This public repository contains the defensive DesktopRanger prototype only.
+Included:
 
-It does not include:
+* defensive DesktopRanger prototype;
+* Windows Desktop isolation logic;
+* Window Station and Desktop access-control code;
+* Visual Studio solution;
+* CI/CD build workflow;
+* CI-built Windows x64 release binary.
 
-* keylogging tools;
-* offensive test harnesses;
+Not included:
+
+* private research version;
+* internal evaluation harnesses;
+* keylogging test tools;
 * bypass experiments;
 * raw experimental logs;
-* private research materials.
+* unpublished research materials.
 
 ## Features
 
@@ -122,15 +122,6 @@ Apache License 2.0.
 
 ## Author
 
-Igor Korkin
-Independent Security Researcher
-
-```text
-https://igorkorkin.github.io/
-```
-
-## Conference Note
-
-This repository accompanies the Pass the SALT 2026 talk on hardening Windows Desktop isolation.
-
-The public release contains the defensive prototype only. Internal evaluation harnesses and keylogging test tools are intentionally not included.
+**Igor Korkin**  
+Independent Security Researcher  
+<https://igorkorkin.github.io/>
