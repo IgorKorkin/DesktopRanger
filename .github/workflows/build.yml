@@ -56,14 +56,13 @@ jobs:
             /p:TreatWarningsAsErrors=false
 
       - name: Upload build artifacts
+        shell: pwsh
+        run: |
+    Get-ChildItem -Recurse -Force .output -ErrorAction SilentlyContinue
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: DesktopRanger-${{ matrix.configuration }}-x64
           path: |
-            **/x64/${{ matrix.configuration }}/*.exe
-            **/x64/${{ matrix.configuration }}/*.dll
-            **/x64/${{ matrix.configuration }}/*.pdb
-            **/${{ matrix.configuration }}/*.exe
-            **/${{ matrix.configuration }}/*.dll
-            **/${{ matrix.configuration }}/*.pdb
-          if-no-files-found: warn
+              .output/${{ matrix.configuration }}/**
+          if-no-files-found: error
