@@ -12,57 +12,52 @@ permissions:
 
 jobs:
   build:
-    name: Build ${{ matrix.configuration }} x64
+    name: Build Release x64
     runs-on: windows-2025-vs2026
-  
-strategy:
-   fail-fast: false
-   matrix:
-     configuration: [Debug, Release]
-  
-steps:
-   - name: Checkout repository
-     uses: actions/checkout@v4
-     with:
-       submodules: recursive
-        
-   - name: Locate MSBuild
-     shell: pwsh
-     run: |
-       $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 
-       $msbuild = & $vswhere `
-         -latest `
-         -products * `
-         -requires Microsoft.Component.MSBuild `
-         -find "MSBuild\**\Bin\MSBuild.exe" |
-         Select-Object -First 1
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-       if (-not $msbuild) {
-         throw "MSBuild was not found."
-       }
+      - name: Locate MSBuild
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 
-       Write-Host "MSBuild path: $msbuild"
-       "MSBUILD_PATH=$msbuild" | Out-File -FilePath $env:GITHUB_ENV -Append
+          $msbuild = & $vswhere `
+            -latest `
+            -products * `
+            -requires Microsoft.Component.MSBuild `
+            -find "MSBuild\**\Bin\MSBuild.exe" |
+            Select-Object -First 1
 
-   - name: Build solution
-     shell: pwsh
-     run: |
-       & "$env:MSBUILD_PATH" .\DesktopRanger.sln `
-         /m `
-         /p:Configuration=${{ matrix.configuration }} `
-         /p:Platform=x64 `
-         /p:TreatWarningsAsErrors=false
+          if (-not $msbuild) {
+            throw "MSBuild was not found."
+          }
 
-   - name: Show output directory
-     shell: pwsh
-     run: |
-       Get-ChildItem -Recurse -Force .output -ErrorAction SilentlyContinue
+          Write-Host "MSBuild path: $msbuild"
+          "MSBUILD_PATH=$msbuild" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-   - name: Upload build artifacts
-     uses: actions/upload-artifact@v4
-     with:
-       name: DesktopRanger-${{ matrix.configuration }}-x64
-       path: |
-         .output/${{ matrix.configuration }}/**
-     if-no-files-found: error
+      - name: Build solution
+        shell: pwsh
+        run: |
+          & "$env:MSBUILD_PATH" .\DesktopRanger.sln `
+            /m `
+            /p:Configuration=Release `
+            /p:Platform=x64 `
+            /p:TreatWarningsAsErrors=false
+
+      - name: Show output directory
+        shell: pwsh
+        run: |
+          Get-ChildItem -Recurse -Force .output -ErrorAction SilentlyContinue
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: DesktopRanger-Release-x64
+          path: |
+            .output/Release/**
+          if-no-files-found: error
