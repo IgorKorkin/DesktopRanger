@@ -37,15 +37,6 @@ Included:
 - CI/CD build workflow;
 - CI-built Windows x64 release binary.
 
-Not included:
-
-- private research version;
-- internal evaluation harnesses;
-- input-interception test tools;
-- bypass experiments;
-- raw experimental logs;
-- unpublished research materials.
-
 ## Features
 
 DesktopRanger currently demonstrates:
