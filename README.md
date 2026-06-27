@@ -10,7 +10,7 @@ This repository contains a **limited public release** focused on the defensive p
 
 ## Release
 
-Public prototype release [DesktopRanger v0.1-pts-2026](https://github.com/IgorKorkin/DesktopRanger/releases/tag/v0.1-pts-2026)
+Public prototype release: [DesktopRanger v0.1-pts-2026](https://github.com/IgorKorkin/DesktopRanger/releases/tag/v0.1-pts-2026)
 
 The release includes source code and a CI-built Windows x64 binary.
 
@@ -26,46 +26,45 @@ Extract the archive and run the executable from the extracted directory.
 
 The prototype may require administrator privileges depending on the demonstrated configuration.
 
-
 ## Scope
 
 Included:
 
-* defensive DesktopRanger prototype;
-* Windows Desktop isolation logic;
-* Window Station and Desktop access-control code;
-* Visual Studio solution;
-* CI/CD build workflow;
-* CI-built Windows x64 release binary.
+- defensive DesktopRanger prototype;
+- Windows Desktop isolation logic;
+- Window Station and Desktop access-control code;
+- Visual Studio solution;
+- CI/CD build workflow;
+- CI-built Windows x64 release binary.
 
 Not included:
 
-* private research version;
-* internal evaluation harnesses;
-* keylogging test tools;
-* bypass experiments;
-* raw experimental logs;
-* unpublished research materials.
+- private research version;
+- internal evaluation harnesses;
+- keylogging test tools;
+- bypass experiments;
+- raw experimental logs;
+- unpublished research materials.
 
 ## Features
 
 DesktopRanger currently demonstrates:
 
-* creation of a separate Windows Desktop;
-* access control for Desktop and Window Station objects;
-* launch of an application inside the protected desktop;
-* switching to and from the protected desktop;
-* basic status logging and control flow.
+- creation of a separate Windows Desktop;
+- access control for Desktop and Window Station objects;
+- launch of an application inside the protected desktop;
+- switching to and from the protected desktop;
+- basic status logging and control flow.
 
 ## Build
 
 Requirements:
 
-* Windows 11 x64;
-* Visual Studio 2026;
-* MSVC Platform Toolset v145;
-* Windows SDK;
-* Git submodules.
+- Windows 11 x64;
+- Visual Studio 2026;
+- MSVC Platform Toolset v145;
+- Windows SDK;
+- Git submodules.
 
 Clone:
 
@@ -108,16 +107,16 @@ DesktopRanger is a research prototype.
 
 It is not production-ready and does not protect against:
 
-* kernel-mode compromise;
-* physical access attacks;
-* compromised target applications;
-* all possible local input-observation techniques.
+- kernel-mode compromise;
+- physical access attacks;
+- compromised target applications;
+- all possible local input-observation techniques.
 
 ## Responsible Use
 
 DesktopRanger is intended for defensive research, Windows isolation experiments, and security engineering discussions.
 
-Do not use this project for unauthorized activity and malware development.
+Do not use this project for unauthorized activity or malware development.
 
 ## License
 
@@ -125,6 +124,5 @@ Apache License 2.0.
 
 ## Author
 
-**Igor Korkin**  
-Independent Security Researcher  
-<https://igorkorkin.github.io/>
+[Igor Korkin](https://igorkorkin.github.io/)  
+Independent Security Researcher
