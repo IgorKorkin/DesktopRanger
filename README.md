@@ -117,7 +117,7 @@ It is not production-ready and does not protect against:
 
 DesktopRanger is intended for defensive research, Windows isolation experiments, and security engineering discussions.
 
-Do not use this project for unauthorized activity, malware development, credential theft, or offensive keylogging.
+Do not use this project for unauthorized activity and malware development.
 
 ## License
 
