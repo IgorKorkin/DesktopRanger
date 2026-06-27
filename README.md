@@ -8,21 +8,24 @@ The project demonstrates how Windows Desktop and Window Station objects can be u
 
 This repository contains a **limited public release** focused on the defensive prototype. A separate private research version is maintained for internal development and contains additional implementation details, evaluation materials, test harnesses, experimental logs, and unpublished research artifacts.
 
-Repository:
-
-```text
-https://github.com/IgorKorkin/DesktopRanger
-```
-
 ## Release
 
-Public prototype release:
-
-```text
-https://github.com/IgorKorkin/DesktopRanger/releases/tag/v0.1-pts-2026
-```
+Public prototype release [DesktopRanger v0.1-pts-2026](https://github.com/IgorKorkin/DesktopRanger/releases/tag/v0.1-pts-2026)
 
 The release includes source code and a CI-built Windows x64 binary.
+
+## Run
+
+Download the CI-built Windows x64 binary from the release page:
+
+```text
+DesktopRanger-v0.1-pts-2026-win-x64.zip
+```
+
+Extract the archive and run the executable from the extracted directory.
+
+The prototype may require administrator privileges depending on the demonstrated configuration.
+
 
 ## Scope
 
