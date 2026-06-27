@@ -1,0 +1,81 @@
+name: Build and Upload Release Binary
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to build and upload to"
+        required: true
+        default: "v0.1-pts-2026"
+
+permissions:
+  contents: write
+
+jobs:
+  release-binary:
+    name: Build and upload release binary
+    runs-on: windows-2025-vs2026
+
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag }}
+          submodules: recursive
+
+      - name: Locate MSBuild
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+
+          $msbuild = & $vswhere `
+            -latest `
+            -products * `
+            -requires Microsoft.Component.MSBuild `
+            -find "MSBuild\**\Bin\MSBuild.exe" |
+            Select-Object -First 1
+
+          if (-not $msbuild) {
+            throw "MSBuild was not found."
+          }
+
+          Write-Host "MSBuild path: $msbuild"
+          "MSBUILD_PATH=$msbuild" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Build Release x64
+        shell: pwsh
+        run: |
+          & "$env:MSBUILD_PATH" .\DesktopRanger.sln `
+            /m `
+            /p:Configuration=Release `
+            /p:Platform=x64 `
+            /p:TreatWarningsAsErrors=false
+
+      - name: Create release archive
+        shell: pwsh
+        run: |
+          $tag = "${{ inputs.release_tag }}"
+          $archive = "DesktopRanger-$tag-win-x64.zip"
+
+          if (-not (Test-Path ".output\Release")) {
+            throw "Output directory .output\Release was not found."
+          }
+
+          Get-ChildItem -Recurse -Force ".output\Release"
+
+          Compress-Archive `
+            -Path ".output\Release\*" `
+            -DestinationPath $archive `
+            -Force
+
+          Write-Host "Created archive: $archive"
+          "RELEASE_ARCHIVE=$archive" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Upload archive to GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ inputs.release_tag }}" "$env:RELEASE_ARCHIVE" `
+            --repo "${{ github.repository }}" `
+            --clobber
