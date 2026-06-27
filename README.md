@@ -41,7 +41,7 @@ Not included:
 
 - private research version;
 - internal evaluation harnesses;
-- keylogging test tools;
+- input-interception test tools;
 - bypass experiments;
 - raw experimental logs;
 - unpublished research materials.
