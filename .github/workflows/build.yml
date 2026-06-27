@@ -1,0 +1,69 @@
+name: Build DesktopRanger
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.configuration }} x64
+    runs-on: windows-2025-vs2026
+
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [Debug, Release]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Locate MSBuild
+        id: msbuild
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+
+          $msbuild = & $vswhere `
+            -latest `
+            -products * `
+            -requires Microsoft.Component.MSBuild `
+            -find "MSBuild\**\Bin\MSBuild.exe" |
+            Select-Object -First 1
+
+          if (-not $msbuild) {
+            throw "MSBuild was not found."
+          }
+
+          "MSBuild path: $msbuild"
+          "MSBUILD_PATH=$msbuild" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Build solution
+        shell: pwsh
+        run: |
+          & "$env:MSBUILD_PATH" .\DesktopRanger.sln `
+            /m `
+            /p:Configuration=${{ matrix.configuration }} `
+            /p:Platform=x64 `
+            /p:TreatWarningsAsErrors=false
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: DesktopRanger-${{ matrix.configuration }}-x64
+          path: |
+            **/x64/${{ matrix.configuration }}/*.exe
+            **/x64/${{ matrix.configuration }}/*.dll
+            **/x64/${{ matrix.configuration }}/*.pdb
+            **/${{ matrix.configuration }}/*.exe
+            **/${{ matrix.configuration }}/*.dll
+            **/${{ matrix.configuration }}/*.pdb
+          if-no-files-found: warn
