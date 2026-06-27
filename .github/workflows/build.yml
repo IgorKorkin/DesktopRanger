@@ -15,7 +15,6 @@ build:
 name: Build ${{ matrix.configuration }} x64
 runs-on: windows-2025-vs2026
 
-```
 strategy:
   fail-fast: false
   matrix:
@@ -67,4 +66,3 @@ steps:
       path: |
         .output/${{ matrix.configuration }}/**
       if-no-files-found: error
-```
