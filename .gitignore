@@ -1,0 +1,25 @@
+# User-specific files
+*.suo
+*.user
+*.venv
+
+# Build-specific files
+*.exe
+*.pdb
+
+# Logger
+app.log
+
+# Visual C++ Cache and Build artifacts
+.intermediate/
+.output/
+.vs/
+vcpkg_installed/
+
+#GoogleTest Files
+packages/
+
+#CodeCoverage Results
+TestResults/
+
+CLAUDE.md

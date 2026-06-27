@@ -1,0 +1,3 @@
+[submodule "external/wil"]
+	path = external/wil
+	url = https://github.com/microsoft/wil.git
