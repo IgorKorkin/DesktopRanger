@@ -112,11 +112,11 @@ It is not production-ready and does not protect against:
 - compromised target applications;
 - all possible local input-observation techniques.
 
-## Responsible Use
+## Intended Use
 
 DesktopRanger is intended for defensive research, Windows isolation experiments, and security engineering discussions.
 
-Do not use this project for unauthorized activity or malware development.
+This section is an ethical use notice and does not modify the Apache License 2.0 terms.
 
 ## License
 
