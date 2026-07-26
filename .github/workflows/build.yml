@@ -1,18 +1,26 @@
-name: Build DesktopRanger
+name: Build and test DesktopRanger
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
+
   pull_request:
-    branches: [ "main" ]
+    branches:
+      - main
+
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  build:
-    name: Build Release x64
+  build-and-test:
+    name: Build and test Release x64
     runs-on: windows-2025-vs2026
 
     steps:
@@ -38,7 +46,8 @@ jobs:
           }
 
           Write-Host "MSBuild path: $msbuild"
-          "MSBUILD_PATH=$msbuild" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "MSBUILD_PATH=$msbuild" |
+            Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Build solution
         shell: pwsh
@@ -49,10 +58,56 @@ jobs:
             /p:Platform=x64 `
             /p:TreatWarningsAsErrors=false
 
-      - name: Show output directory
+      - name: Run unit tests
         shell: pwsh
         run: |
-          Get-ChildItem -Recurse -Force .output -ErrorAction SilentlyContinue
+          $testExecutable = Join-Path `
+            $env:GITHUB_WORKSPACE `
+            ".output\Release\Desktop.Ranger.Tests.exe"
+
+          $testResults = Join-Path `
+            $env:GITHUB_WORKSPACE `
+            ".output\Release\test-results.xml"
+
+          if (-not (Test-Path $testExecutable)) {
+            Write-Host "Test executable was not found."
+            Write-Host "Contents of the output directory:"
+
+            Get-ChildItem `
+              -Path ".output" `
+              -Recurse `
+              -Force `
+              -ErrorAction SilentlyContinue
+
+            throw "Missing test executable: $testExecutable"
+          }
+
+          Write-Host "Running tests: $testExecutable"
+
+          & $testExecutable `
+            "--gtest_output=xml:$testResults"
+
+          $testExitCode = $LASTEXITCODE
+
+          if ($testExitCode -ne 0) {
+            Write-Error "Unit tests failed with exit code $testExitCode."
+            exit $testExitCode
+          }
+
+          Write-Host "All unit tests passed."
+
+      - name: Show output directory
+        if: ${{ always() }}
+        shell: pwsh
+        run: |
+          Get-ChildItem -Recurse -Force -Path ".output" -ErrorAction SilentlyContinue
+      - name: Upload test results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: DesktopRanger-Test-Results
+          path: .output/Release/test-results.xml
+          if-no-files-found: warn
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
