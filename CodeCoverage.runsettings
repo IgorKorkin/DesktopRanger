@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector
+        friendlyName="Code Coverage"
+        uri="datacollector://Microsoft/CodeCoverage/2.0">
+
+        <Configuration>
+          <IncludeTestAssembly>True</IncludeTestAssembly>
+
+          <CodeCoverage>
+            <Sources>
+              <Include>
+                <Source>.*\\desktop\.ranger\.core\\.*</Source>
+              </Include>
+            </Sources>
+
+            <EnableStaticNativeInstrumentation>
+              True
+            </EnableStaticNativeInstrumentation>
+
+            <EnableDynamicNativeInstrumentation>
+              False
+            </EnableDynamicNativeInstrumentation>
+          </CodeCoverage>
+        </Configuration>
+
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>
