@@ -103,7 +103,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Desktop.Ranger.Core\Desktop.Ranger.Core.vcxproj">
+    <ProjectReference Include="..\desktop.ranger.core\desktop.ranger.core.vcxproj">
       <Project>{8b80b052-8d00-44b6-af5a-a9785c26142a}</Project>
     </ProjectReference>
   </ItemGroup>
