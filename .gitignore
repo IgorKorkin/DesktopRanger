@@ -1,25 +1,94 @@
-# User-specific files
+# Visual Studio user-specific files
+.vs/
 *.suo
 *.user
-*.venv
+*.userosscache
+*.sln.docstates
 
-# Build-specific files
-*.exe
-*.pdb
+# Visual Studio databases and caches
+*.VC.db
+*.VC.VC.opendb
+*.opendb
+*.opensdf
+*.sdf
+*.ncb
+ipch/
 
-# Logger
-app.log
-
-# Visual C++ Cache and Build artifacts
-.intermediate/
+# Build output directories
 .output/
-.vs/
-vcpkg_installed/
+.intermediate/
 
-#GoogleTest Files
+# C and C++ Build-specific files
+*.exe
+*.dll
+*.lib
+*.exp
+
+# C and C++ compiler/linker output
+*.obj
+*.o
+*.pch
+*.pdb
+*.idb
+*.ilk
+*.ipdb
+*.iobj
+*.tlog
+*.lastbuildstate
+
+# Incremental and profiling output
+*.pgc
+*.pgd
+*.rsp
+*.tmp
+
+#GoogleTest Files NuGet
 packages/
 
-#CodeCoverage Results
-TestResults/
+# GoogleTest and test results
 
+TestResults/
+Testing/
+*.trx
+*.coverage
+*.coveragexml
+test-results.xml
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+cmake-build-*/
+CMakeUserPresets.json
+_deps/
+
+
+# vcpkg local output
+vcpkg_installed/
+buildtrees/
+downloads/
+
+# Logger
+*.log
+app.log
+
+# Editor and operating-system files
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Python/local environments
+# ========================================
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Local assistant/tool configuration
 CLAUDE.md
+CLAUDE.md
+.claude/
