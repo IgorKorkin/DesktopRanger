@@ -1,10 +1,10 @@
 #include "desktop_name_generator.h"
 
-#include <array>
 #include <random>
+#include <string>
 #include <string_view>
 
-namespace DR
+namespace DesktopRanger::DesktopName
 {
 	namespace
 	{
@@ -19,7 +19,7 @@ namespace DR
 		return kDesktopNameAlphabet.find(character) != std::wstring_view::npos;
 	}
 
-	std::wstring GenerateDesktopName(std::mt19937 &generator, std::size_t length)
+	std::wstring Generate(std::mt19937 &generator, std::size_t length)
 	{
 		std::uniform_int_distribution<std::size_t> Distribution(
 			0, kDesktopNameAlphabet.size() - 1);
@@ -34,10 +34,10 @@ namespace DR
 		return Result;
 	}
 
-	std::wstring GenerateDesktopName()
+	std::wstring Generate()
 	{
 		thread_local std::mt19937 Generator{ std::random_device{}() };
-		return GenerateDesktopName(Generator);
+		return Generate(Generator);
 	}
 
-} // namespace DR
+} // namespace DesktopRanger::DesktopName

@@ -43,25 +43,7 @@ namespace AdvancedSecureDesktop
 
 	std::wstring GetRandomDesktopName()
 	{
-		return DR::GenerateDesktopName();
-
-		// 		static constexpr wchar_t alphabet[] = L"abcdefghijklmnopqrstuvwxyz" // 26
-		// 											  "0123456789"					// 10
-		// 											  "_-.,;:@#$%&'()[]{}+=~`!^";	// 25
-		//
-		// 		static constexpr auto alphabetSize =
-		// 			std::size(alphabet) - 1; // without null terminator
-		//
-		// 		static thread_local std::mt19937 generate(std::random_device{}());
-		//
-		// 		static constexpr auto length = 255;
-		// 		std::wstring result(length, L'\0');
-		//
-		// 		for (wchar_t &c : result) {
-		// 			c = alphabet[generate() % alphabetSize];
-		// 		}
-		//
-		// 		return result;
+		return DesktopRanger::DesktopName::Generate();
 	}
 
 	bool CreateNewDesktop(IN std::wstring DesktopName, OUT HDESK &DefaultDesktopHandle,
