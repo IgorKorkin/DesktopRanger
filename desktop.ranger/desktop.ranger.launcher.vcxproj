@@ -97,7 +97,6 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="..\simple.desktop.console\simple_secure_desktop.cpp" />
     <ClCompile Include="status_logger.cpp" />
-    <ClCompile Include="utils.cpp" />
     <ClCompile Include="winstation_patcher.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -106,7 +105,6 @@
     <ClInclude Include="control_window.h" />
     <ClInclude Include="secure_app_launcher.h" />
     <ClInclude Include="status_logger.h" />
-    <ClInclude Include="utils.h" />
     <ClInclude Include="winstation_patcher.h" />
   </ItemGroup>
   <ItemGroup>

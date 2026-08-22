@@ -99,9 +99,13 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="desktop_name_generator.h" />
+    <ClInclude Include="security_descriptor.h" />
+    <ClInclude Include="window_station_policy.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="desktop_name_generator.cpp" />
+    <ClCompile Include="security_descriptor.cpp" />
+    <ClCompile Include="window_station_policy.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
