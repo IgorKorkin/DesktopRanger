@@ -18,8 +18,8 @@
 #include <wil/resource.h>
 
 #include "secure_app_launcher.h"
+#include "security_descriptor.h"
 #include "status_logger.h"
-#include "utils.h"
 #include "winstation_patcher.h"
 
 namespace SecureApplicationLauncher
