@@ -21,18 +21,12 @@
     <ClInclude Include="security_descriptor.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="window_station_policy.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="desktop_name_generator.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="security_descriptor.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="window_station_policy.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
