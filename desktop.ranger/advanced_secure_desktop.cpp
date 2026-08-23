@@ -60,7 +60,7 @@ namespace AdvancedSecureDesktop
 		}
 
 		// D:P  -> защищённая DACL, пустая (никому не даём доступ)
-		SecurityDescriptor sdRestrict(L"D:P");
+		DesktopRanger::SecurityDescriptor sdRestrict(L"D:P");
 		if (!sdRestrict.Initialized()) {
 			return false;
 		}

@@ -1,8 +1,8 @@
-#include "desktop_name_generator.h"
-
 #include <random>
 #include <string>
 #include <string_view>
+
+#include "desktop_name_generator.h"
 
 namespace DesktopRanger::DesktopName
 {
