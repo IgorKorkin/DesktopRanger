@@ -1,6 +1,6 @@
-#include <pch.h>
+#include "pch.h"
 
-#include <security_descriptor.h>
+#include "security_descriptor.h"
 
 namespace DesktopRanger::Tests
 {
