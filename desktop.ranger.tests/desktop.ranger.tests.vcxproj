@@ -104,6 +104,7 @@
       <PrecompiledHeaderOutputFile Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
       </PrecompiledHeaderOutputFile>
     </ClCompile>
+    <ClCompile Include="security_descriptor_test.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\desktop.ranger.core\desktop.ranger.core.vcxproj">
