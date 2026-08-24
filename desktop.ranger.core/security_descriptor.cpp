@@ -9,37 +9,40 @@
 
 #include "security_descriptor.h"
 
-SecurityDescriptor::SecurityDescriptor(std::wstring sddl)
+namespace DesktopRanger
 {
-	PSECURITY_DESCRIPTOR raw{};
+	SecurityDescriptor::SecurityDescriptor(std::wstring sddl)
+	{
+		PSECURITY_DESCRIPTOR raw{};
 
-	if (!::ConvertStringSecurityDescriptorToSecurityDescriptorW(
-			sddl.c_str(), SDDL_REVISION_1, &raw, nullptr)) {
-		return;
+		if (!::ConvertStringSecurityDescriptorToSecurityDescriptorW(
+				sddl.c_str(), SDDL_REVISION_1, &raw, nullptr)) {
+			return;
+		}
+
+		psd_.reset(raw);
 	}
 
-	psd_.reset(raw);
-}
-
-bool SecurityDescriptor::Initialized() const noexcept
-{
-	return static_cast<bool>(psd_);
-}
-
-bool SecurityDescriptor::SetDescriptor(HANDLE hObject) const noexcept
-{
-	if (!psd_) {
-		return false;
+	bool SecurityDescriptor::Initialized() const noexcept
+	{
+		return static_cast<bool>(psd_);
 	}
 
-	if (!::SetKernelObjectSecurity(hObject, DACL_SECURITY_INFORMATION, psd_.get())) {
-		return false;
+	bool SecurityDescriptor::SetDescriptor(HANDLE hObject) const noexcept
+	{
+		if (!psd_) {
+			return false;
+		}
+
+		if (!::SetKernelObjectSecurity(hObject, DACL_SECURITY_INFORMATION, psd_.get())) {
+			return false;
+		}
+
+		return true;
 	}
 
-	return true;
-}
-
-PSECURITY_DESCRIPTOR SecurityDescriptor::GetDescriptor() const noexcept
-{
-	return psd_.get();
-}
+	PSECURITY_DESCRIPTOR SecurityDescriptor::GetDescriptor() const noexcept
+	{
+		return psd_.get();
+	}
+} // namespace DesktopRanger

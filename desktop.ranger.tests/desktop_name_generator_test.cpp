@@ -9,7 +9,6 @@
 
 namespace DesktopRanger::DesktopName::Tests
 {
-
 	TEST(DesktopNameGenerator, GeneratesDefaultLengthName)
 	{
 		std::mt19937 generator{ 12345 };

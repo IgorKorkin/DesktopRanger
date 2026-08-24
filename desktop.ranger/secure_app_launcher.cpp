@@ -322,12 +322,13 @@ namespace SecureApplicationLauncher
 			return;
 		}
 
-		SecurityDescriptor sdAllow(std::format(L"D:(A;;GA;;;{})", userSidString));
+		DesktopRanger::SecurityDescriptor sdAllow(
+			std::format(L"D:(A;;GA;;;{})", userSidString));
 		if (!sdAllow.Initialized()) {
 			return;
 		}
 
-		SecurityDescriptor sdRestrict(L"D:P");
+		DesktopRanger::SecurityDescriptor sdRestrict(L"D:P");
 		if (!sdRestrict.Initialized()) {
 			return;
 		}
