@@ -67,13 +67,15 @@ namespace DesktopRanger::WindowStationPolicy
 			return std::unexpected(::GetLastError());
 		}
 
-		auto *copy = static_cast<::ACL *>(::LocalAlloc(LPTR, info.AclBytesInUse));
+		const auto aclSize = info.AclBytesInUse + info.AclBytesFree;
+
+		auto *copy = static_cast<::ACL *>(::LocalAlloc(LPTR, aclSize));
 
 		if (!copy) {
 			return std::unexpected(ERROR_NOT_ENOUGH_MEMORY);
 		}
 
-		std::memcpy(copy, source, info.AclBytesInUse);
+		std::memcpy(copy, source, aclSize);
 
 		return UniqueAcl{ copy };
 	}
