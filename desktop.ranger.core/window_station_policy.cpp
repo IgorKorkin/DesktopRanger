@@ -21,17 +21,17 @@ namespace DesktopRanger::WindowStationPolicy
 
 	std::expected<UniqueSecurityDescriptor, DWORD> SnapshotDacl(HWINSTA station) noexcept
 	{
-		PSECURITY_DESCRIPTOR descriptor{};
+		void *rawDescriptor{};
 
 		const auto status =
 			::GetSecurityInfo(station, SE_WINDOW_OBJECT, DACL_SECURITY_INFORMATION,
-							  nullptr, nullptr, nullptr, nullptr, &descriptor);
+							  nullptr, nullptr, nullptr, nullptr, &rawDescriptor);
 
 		if (status != ERROR_SUCCESS) {
 			return std::unexpected(status);
 		}
 
-		return UniqueSecurityDescriptor{ descriptor };
+		return UniqueSecurityDescriptor{ rawDescriptor };
 	}
 
 } // namespace DesktopRanger::WindowStationPolicy
