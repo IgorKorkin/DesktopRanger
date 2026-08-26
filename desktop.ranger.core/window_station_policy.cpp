@@ -1,5 +1,7 @@
 #include <string>
 
+#include <Aclapi.h>
+
 #include "window_station_policy.h"
 
 namespace DesktopRanger::WindowStationPolicy
@@ -16,4 +18,20 @@ namespace DesktopRanger::WindowStationPolicy
 
 		return station;
 	}
+
+	std::expected<UniqueSecurityDescriptor, DWORD> SnapshotDacl(HWINSTA station) noexcept
+	{
+		PSECURITY_DESCRIPTOR descriptor{};
+
+		const auto status =
+			::GetSecurityInfo(station, SE_WINDOW_OBJECT, DACL_SECURITY_INFORMATION,
+							  nullptr, nullptr, nullptr, nullptr, &descriptor);
+
+		if (status != ERROR_SUCCESS) {
+			return std::unexpected(status);
+		}
+
+		return UniqueSecurityDescriptor{ descriptor };
+	}
+
 } // namespace DesktopRanger::WindowStationPolicy
