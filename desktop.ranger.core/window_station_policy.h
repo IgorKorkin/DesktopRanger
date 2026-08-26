@@ -27,7 +27,4 @@ namespace DesktopRanger::WindowStationPolicy
 	[[nodiscard]]
 	std::expected<::ACL *, DWORD> GetDacl(::PSECURITY_DESCRIPTOR descriptor) noexcept;
 
-	[[nodiscard]]
-	std::expected<UniqueAcl, DWORD> CloneDacl(::ACL *source) noexcept;
-
 } // namespace DesktopRanger::WindowStationPolicy
