@@ -9,15 +9,16 @@
 
 namespace DesktopRanger::WindowStationPolicy
 {
-
 	using UniqueHandle =
 		wil::unique_any<::HWINSTA, decltype(&::CloseWindowStation), ::CloseWindowStation>;
 
-	[[nodiscard]]
-	std::expected<UniqueHandle, DWORD> Open(std::wstring_view name = L"WinSta0") noexcept;
-
 	using UniqueSecurityDescriptor =
 		wil::unique_any<::PSECURITY_DESCRIPTOR, decltype(&::LocalFree), ::LocalFree>;
+
+	using UniqueAcl = wil::unique_any<::ACL *, decltype(&::LocalFree), ::LocalFree>;
+
+	[[nodiscard]]
+	std::expected<UniqueHandle, DWORD> Open(std::wstring_view name = L"WinSta0") noexcept;
 
 	[[nodiscard]]
 	std::expected<UniqueSecurityDescriptor, DWORD>
@@ -25,4 +26,8 @@ namespace DesktopRanger::WindowStationPolicy
 
 	[[nodiscard]]
 	std::expected<::ACL *, DWORD> GetDacl(::PSECURITY_DESCRIPTOR descriptor) noexcept;
+
+	[[nodiscard]]
+	std::expected<UniqueAcl, DWORD> CloneDacl(::ACL *source) noexcept;
+
 } // namespace DesktopRanger::WindowStationPolicy

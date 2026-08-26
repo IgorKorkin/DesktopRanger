@@ -1,3 +1,4 @@
+#include <cstring>
 #include <string>
 
 #include <Aclapi.h>
@@ -51,6 +52,30 @@ namespace DesktopRanger::WindowStationPolicy
 		}
 
 		return dacl;
+	}
+
+	std::expected<UniqueAcl, DWORD> CloneDacl(::ACL *source) noexcept
+	{
+		if (!source) {
+			return std::unexpected(ERROR_INVALID_ACL);
+		}
+
+		::ACL_SIZE_INFORMATION info{};
+
+		if (!::GetAclInformation(source, &info, sizeof(::ACL_SIZE_INFORMATION),
+								 ::ACL_INFORMATION_CLASS::AclSizeInformation)) {
+			return std::unexpected(::GetLastError());
+		}
+
+		auto *copy = static_cast<::ACL *>(::LocalAlloc(LPTR, info.AclBytesInUse));
+
+		if (!copy) {
+			return std::unexpected(ERROR_NOT_ENOUGH_MEMORY);
+		}
+
+		std::memcpy(copy, source, info.AclBytesInUse);
+
+		return UniqueAcl{ copy };
 	}
 
 } // namespace DesktopRanger::WindowStationPolicy
