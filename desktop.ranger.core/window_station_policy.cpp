@@ -69,4 +69,20 @@ namespace DesktopRanger::WindowStationPolicy
 		return acl;
 	}
 
+	std::expected<::ACL_SIZE_INFORMATION, DWORD>
+	GetAclSizeInformation(::ACL *acl) noexcept
+	{
+		if (!acl) {
+			return std::unexpected(ERROR_INVALID_ACL);
+		}
+
+		::ACL_SIZE_INFORMATION info{};
+
+		if (!::GetAclInformation(acl, &info, sizeof(info), AclSizeInformation)) {
+			return std::unexpected(::GetLastError());
+		}
+
+		return info;
+	}
+
 } // namespace DesktopRanger::WindowStationPolicy

@@ -29,4 +29,7 @@ namespace DesktopRanger::WindowStationPolicy
 
 	[[nodiscard]] std::expected<UniqueAcl, DWORD> CreateAcl(DWORD size) noexcept;
 
+	[[nodiscard]] std::expected<::ACL_SIZE_INFORMATION, DWORD>
+	GetAclSizeInformation(::ACL *acl) noexcept;
+
 } // namespace DesktopRanger::WindowStationPolicy
