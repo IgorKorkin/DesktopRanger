@@ -1,4 +1,3 @@
-#include <cstring>
 #include <string>
 
 #include <Aclapi.h>
@@ -78,7 +77,8 @@ namespace DesktopRanger::WindowStationPolicy
 
 		::ACL_SIZE_INFORMATION info{};
 
-		if (!::GetAclInformation(acl, &info, sizeof(info), AclSizeInformation)) {
+		if (!::GetAclInformation(acl, &info, sizeof(info),
+								 ::ACL_INFORMATION_CLASS::AclSizeInformation)) {
 			return std::unexpected(::GetLastError());
 		}
 
