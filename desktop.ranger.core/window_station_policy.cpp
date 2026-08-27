@@ -54,4 +54,19 @@ namespace DesktopRanger::WindowStationPolicy
 		return dacl;
 	}
 
+	std::expected<UniqueAcl, DWORD> CreateAcl(DWORD size) noexcept
+	{
+		UniqueAcl acl{ static_cast<::ACL *>(::LocalAlloc(LPTR, size)) };
+
+		if (!acl) {
+			return std::unexpected(ERROR_NOT_ENOUGH_MEMORY);
+		}
+
+		if (!::InitializeAcl(acl.get(), size, ACL_REVISION)) {
+			return std::unexpected(::GetLastError());
+		}
+
+		return acl;
+	}
+
 } // namespace DesktopRanger::WindowStationPolicy
