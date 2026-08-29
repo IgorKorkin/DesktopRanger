@@ -85,4 +85,18 @@ namespace DesktopRanger::WindowStationPolicy
 		return info;
 	}
 
+	std::expected<::ACE_HEADER *, DWORD> GetAceAt(::ACL *acl, DWORD aceIndex) noexcept
+	{
+		if (!acl) {
+			return std::unexpected(ERROR_INVALID_ACL);
+		}
+
+		void *rawAce{};
+		if (!::GetAce(acl, aceIndex, &rawAce)) {
+			return std::unexpected(::GetLastError());
+		}
+
+		return static_cast<::ACE_HEADER *>(rawAce);
+	}
+
 } // namespace DesktopRanger::WindowStationPolicy
