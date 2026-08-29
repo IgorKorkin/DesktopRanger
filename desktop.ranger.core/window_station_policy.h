@@ -32,4 +32,7 @@ namespace DesktopRanger::WindowStationPolicy
 	[[nodiscard]] std::expected<::ACL_SIZE_INFORMATION, DWORD>
 	GetAclSizeInformation(::ACL *acl) noexcept;
 
+	[[nodiscard]] std::expected<::ACE_HEADER *, DWORD> GetAceAt(::ACL *acl,
+																DWORD aceIndex) noexcept;
+
 } // namespace DesktopRanger::WindowStationPolicy
