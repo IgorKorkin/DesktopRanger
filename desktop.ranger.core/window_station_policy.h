@@ -34,8 +34,8 @@ namespace DesktopRanger::WindowStationPolicy
 	[[nodiscard]] std::expected<::ACL_SIZE_INFORMATION, DWORD>
 	GetAclSizeInformation(const ::ACL *acl) noexcept;
 
-	[[nodiscard]] std::expected<::ACE_HEADER *, DWORD> GetAceAt(const ::ACL *acl,
-																DWORD aceIndex) noexcept;
+	[[nodiscard]] std::expected<const ::ACE_HEADER *, DWORD>
+	GetAceAt(const ::ACL *acl, DWORD aceIndex) noexcept;
 
 	[[nodiscard]] std::expected<void, DWORD> AppendAce(::ACL *acl,
 													   const ::ACE_HEADER *ace) noexcept;

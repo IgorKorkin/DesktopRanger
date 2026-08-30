@@ -86,8 +86,8 @@ namespace DesktopRanger::WindowStationPolicy
 		return info;
 	}
 
-	std::expected<::ACE_HEADER *, DWORD> GetAceAt(const ::ACL *acl,
-												  DWORD aceIndex) noexcept
+	std::expected<const ::ACE_HEADER *, DWORD> GetAceAt(const ::ACL *acl,
+														DWORD aceIndex) noexcept
 	{
 		if (!acl) {
 			return std::unexpected(ERROR_INVALID_ACL);
@@ -98,7 +98,7 @@ namespace DesktopRanger::WindowStationPolicy
 			return std::unexpected(::GetLastError());
 		}
 
-		return static_cast<::ACE_HEADER *>(rawAce);
+		return static_cast<const ::ACE_HEADER *>(rawAce);
 	}
 
 	std::expected<void, DWORD> AppendAce(::ACL *acl, const ::ACE_HEADER *ace) noexcept
