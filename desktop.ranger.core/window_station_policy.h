@@ -28,7 +28,8 @@ namespace DesktopRanger::WindowStationPolicy
 	[[nodiscard]]
 	std::expected<::ACL *, DWORD> GetDacl(::PSECURITY_DESCRIPTOR descriptor) noexcept;
 
-	[[nodiscard]] std::expected<UniqueAcl, DWORD> CreateAcl(DWORD size) noexcept;
+	[[nodiscard]] std::expected<UniqueAcl, DWORD>
+	CreateAcl(DWORD size, DWORD revision = ACL_REVISION) noexcept;
 
 	[[nodiscard]] std::expected<::ACL_SIZE_INFORMATION, DWORD>
 	GetAclSizeInformation(const ::ACL *acl) noexcept;

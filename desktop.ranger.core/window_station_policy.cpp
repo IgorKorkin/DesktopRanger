@@ -53,7 +53,8 @@ namespace DesktopRanger::WindowStationPolicy
 		return dacl;
 	}
 
-	std::expected<UniqueAcl, DWORD> CreateAcl(DWORD size) noexcept
+	std::expected<UniqueAcl, DWORD> CreateAcl(DWORD size,
+											  DWORD revision /* = ACL_REVISION*/) noexcept
 	{
 		UniqueAcl acl{ static_cast<::ACL *>(::LocalAlloc(LPTR, size)) };
 
@@ -61,7 +62,7 @@ namespace DesktopRanger::WindowStationPolicy
 			return std::unexpected(ERROR_NOT_ENOUGH_MEMORY);
 		}
 
-		if (!::InitializeAcl(acl.get(), size, ACL_REVISION)) {
+		if (!::InitializeAcl(acl.get(), size, revision)) {
 			return std::unexpected(::GetLastError());
 		}
 
@@ -110,7 +111,7 @@ namespace DesktopRanger::WindowStationPolicy
 			return std::unexpected(ERROR_INVALID_PARAMETER);
 		}
 
-		if (!::AddAce(acl, ACL_REVISION, MAXDWORD, const_cast<::ACE_HEADER *>(ace),
+		if (!::AddAce(acl, acl->AclRevision, MAXDWORD, const_cast<::ACE_HEADER *>(ace),
 					  ace->AceSize)) {
 			return std::unexpected(::GetLastError());
 		}
