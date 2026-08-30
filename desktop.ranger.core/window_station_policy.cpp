@@ -6,9 +6,9 @@
 
 namespace DesktopRanger::WindowStationPolicy
 {
-	std::expected<UniqueHandle, DWORD> Open(std::wstring_view name) noexcept
+	std::expected<UniqueHandle, DWORD> OpenStation(std::wstring_view stationName) noexcept
 	{
-		std::wstring nullTerminatedName{ name };
+		std::wstring nullTerminatedName{ stationName };
 		UniqueHandle station{ ::OpenWindowStationW(nullTerminatedName.data(), FALSE,
 												   READ_CONTROL | WRITE_DAC) };
 
@@ -35,14 +35,15 @@ namespace DesktopRanger::WindowStationPolicy
 		return UniqueSecurityDescriptor{ rawDescriptor };
 	}
 
-	std::expected<::ACL *, DWORD> GetDacl(::PSECURITY_DESCRIPTOR descriptor) noexcept
+	std::expected<::ACL *, DWORD>
+	GetDacl(const ::PSECURITY_DESCRIPTOR descriptor) noexcept
 	{
 		::ACL *dacl{};
 		::BOOL daclPresent{};
 		::BOOL daclDefaulted{};
 
-		if (!::GetSecurityDescriptorDacl(descriptor, &daclPresent, &dacl,
-										 &daclDefaulted)) {
+		if (!::GetSecurityDescriptorDacl(static_cast<::PSECURITY_DESCRIPTOR>(descriptor),
+										 &daclPresent, &dacl, &daclDefaulted)) {
 			return std::unexpected(::GetLastError());
 		}
 
@@ -69,7 +70,7 @@ namespace DesktopRanger::WindowStationPolicy
 	}
 
 	std::expected<::ACL_SIZE_INFORMATION, DWORD>
-	GetAclSizeInformation(::ACL *acl) noexcept
+	GetAclSizeInformation(const ::ACL *acl) noexcept
 	{
 		if (!acl) {
 			return std::unexpected(ERROR_INVALID_ACL);
@@ -77,7 +78,7 @@ namespace DesktopRanger::WindowStationPolicy
 
 		::ACL_SIZE_INFORMATION info{};
 
-		if (!::GetAclInformation(acl, &info, sizeof(info),
+		if (!::GetAclInformation(const_cast<::ACL *>(acl), &info, sizeof(info),
 								 ::ACL_INFORMATION_CLASS::AclSizeInformation)) {
 			return std::unexpected(::GetLastError());
 		}
@@ -85,18 +86,66 @@ namespace DesktopRanger::WindowStationPolicy
 		return info;
 	}
 
-	std::expected<::ACE_HEADER *, DWORD> GetAceAt(::ACL *acl, DWORD aceIndex) noexcept
+	std::expected<::ACE_HEADER *, DWORD> GetAceAt(const ::ACL *acl,
+												  DWORD aceIndex) noexcept
 	{
 		if (!acl) {
 			return std::unexpected(ERROR_INVALID_ACL);
 		}
 
 		void *rawAce{};
-		if (!::GetAce(acl, aceIndex, &rawAce)) {
+		if (!::GetAce(const_cast<::ACL *>(acl), aceIndex, &rawAce)) {
 			return std::unexpected(::GetLastError());
 		}
 
 		return static_cast<::ACE_HEADER *>(rawAce);
+	}
+
+	std::expected<void, DWORD> AppendAce(::ACL *acl, const ::ACE_HEADER *ace) noexcept
+	{
+		if (!acl) {
+			return std::unexpected(ERROR_INVALID_ACL);
+		}
+
+		if (!ace) {
+			return std::unexpected(ERROR_INVALID_PARAMETER);
+		}
+
+		if (!::AddAce(acl, ACL_REVISION, MAXDWORD, const_cast<::ACE_HEADER *>(ace),
+					  ace->AceSize)) {
+			return std::unexpected(::GetLastError());
+		}
+		return {};
+	}
+
+	std::expected<void, DWORD> CopyAces(const ::ACL *source, ::ACL *destination) noexcept
+	{
+		if (!source || !destination) {
+			return std::unexpected(ERROR_INVALID_ACL);
+		}
+
+		auto info = GetAclSizeInformation(source);
+
+		if (!info) {
+			return std::unexpected(info.error());
+		}
+
+		for (DWORD aceIndex = 0; aceIndex < info->AceCount; ++aceIndex) {
+
+			auto ace = GetAceAt(source, aceIndex);
+
+			if (!ace) {
+				return std::unexpected(ace.error());
+			}
+
+			auto appendResult = AppendAce(destination, ace.value());
+
+			if (!appendResult) {
+				return std::unexpected(appendResult.error());
+			}
+		}
+
+		return {};
 	}
 
 } // namespace DesktopRanger::WindowStationPolicy
