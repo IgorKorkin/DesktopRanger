@@ -124,6 +124,10 @@ namespace DesktopRanger::WindowStationPolicy
 			return std::unexpected(ERROR_INVALID_ACL);
 		}
 
+		if (source == destination) {
+			return std::unexpected(ERROR_INVALID_PARAMETER);
+		}
+
 		auto info = GetAclSizeInformation(source);
 
 		if (!info) {
