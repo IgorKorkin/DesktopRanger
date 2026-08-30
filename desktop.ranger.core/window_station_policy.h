@@ -26,8 +26,7 @@ namespace DesktopRanger::WindowStationPolicy
 	SnapshotDacl(::HWINSTA station) noexcept;
 
 	[[nodiscard]]
-	std::expected<::ACL *, DWORD>
-	GetDacl(const ::PSECURITY_DESCRIPTOR descriptor) noexcept;
+	std::expected<::ACL *, DWORD> GetDacl(::PSECURITY_DESCRIPTOR descriptor) noexcept;
 
 	[[nodiscard]] std::expected<UniqueAcl, DWORD> CreateAcl(DWORD size) noexcept;
 

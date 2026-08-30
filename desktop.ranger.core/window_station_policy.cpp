@@ -35,15 +35,14 @@ namespace DesktopRanger::WindowStationPolicy
 		return UniqueSecurityDescriptor{ rawDescriptor };
 	}
 
-	std::expected<::ACL *, DWORD>
-	GetDacl(const ::PSECURITY_DESCRIPTOR descriptor) noexcept
+	std::expected<::ACL *, DWORD> GetDacl(::PSECURITY_DESCRIPTOR descriptor) noexcept
 	{
 		::ACL *dacl{};
 		::BOOL daclPresent{};
 		::BOOL daclDefaulted{};
 
-		if (!::GetSecurityDescriptorDacl(static_cast<::PSECURITY_DESCRIPTOR>(descriptor),
-										 &daclPresent, &dacl, &daclDefaulted)) {
+		if (!::GetSecurityDescriptorDacl(descriptor, &daclPresent, &dacl,
+										 &daclDefaulted)) {
 			return std::unexpected(::GetLastError());
 		}
 
