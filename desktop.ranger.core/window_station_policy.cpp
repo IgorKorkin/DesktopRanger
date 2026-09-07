@@ -147,4 +147,14 @@ namespace DesktopRanger::WindowStationPolicy
 		return {};
 	}
 
+	std::expected<UniqueAcl, DWORD> CreateEmptyAclLike(const ::ACL *source) noexcept
+	{
+		const auto info = GetAclSizeInformation(source);
+		if (!info) {
+			return std::unexpected(info.error());
+		}
+
+		return CreateAcl(info->AclBytesInUse, source->AclRevision);
+	}
+
 } // namespace DesktopRanger::WindowStationPolicy
