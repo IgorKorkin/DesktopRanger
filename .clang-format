@@ -3,6 +3,7 @@ IndentWidth: 4
 TabWidth: 4
 UseTab: Always
 ColumnLimit: 90
+MaxEmptyLinesToKeep: 1
 
 BreakBeforeBraces: Custom
 BraceWrapping:
