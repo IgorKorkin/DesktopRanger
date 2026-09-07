@@ -11,7 +11,6 @@ namespace DesktopRanger::WindowStationPolicy
 		std::wstring nullTerminatedName{ stationName };
 		UniqueHandle station{ ::OpenWindowStationW(nullTerminatedName.data(), FALSE,
 												   READ_CONTROL | WRITE_DAC) };
-
 		if (!station) {
 			return std::unexpected(::GetLastError());
 		}
@@ -27,7 +26,6 @@ namespace DesktopRanger::WindowStationPolicy
 		const auto status = ::GetSecurityInfo(station, ::SE_OBJECT_TYPE::SE_WINDOW_OBJECT,
 											  DACL_SECURITY_INFORMATION, nullptr, nullptr,
 											  nullptr, nullptr, &rawDescriptor);
-
 		if (status != ERROR_SUCCESS) {
 			return std::unexpected(status);
 		}
@@ -129,7 +127,6 @@ namespace DesktopRanger::WindowStationPolicy
 		}
 
 		auto info = GetAclSizeInformation(source);
-
 		if (!info) {
 			return std::unexpected(info.error());
 		}
@@ -137,13 +134,11 @@ namespace DesktopRanger::WindowStationPolicy
 		for (DWORD aceIndex = 0; aceIndex < info->AceCount; ++aceIndex) {
 
 			auto ace = GetAceAt(source, aceIndex);
-
 			if (!ace) {
 				return std::unexpected(ace.error());
 			}
 
 			auto appendResult = AppendAce(destination, ace.value());
-
 			if (!appendResult) {
 				return std::unexpected(appendResult.error());
 			}
