@@ -43,4 +43,7 @@ namespace DesktopRanger::WindowStationPolicy
 	[[nodiscard]]
 	std::expected<void, DWORD> CopyAces(const ::ACL *source, ::ACL *destination) noexcept;
 
+	[[nodiscard]] std::expected<UniqueAcl, DWORD>
+	CreateEmptyAclLike(const ::ACL *source) noexcept;
+
 } // namespace DesktopRanger::WindowStationPolicy
