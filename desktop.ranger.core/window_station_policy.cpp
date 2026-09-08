@@ -84,19 +84,18 @@ namespace DesktopRanger::WindowStationPolicy
 		return info;
 	}
 
-	std::expected<const ::ACE_HEADER *, DWORD> GetAceAt(const ::ACL *acl,
-														DWORD aceIndex) noexcept
+	std::expected<::ACE_HEADER *, DWORD> GetAceAt(::ACL *acl, DWORD aceIndex) noexcept
 	{
 		if (!acl) {
 			return std::unexpected(ERROR_INVALID_ACL);
 		}
 
 		void *rawAce{};
-		if (!::GetAce(const_cast<::ACL *>(acl), aceIndex, &rawAce)) {
+		if (!::GetAce(acl, aceIndex, &rawAce)) {
 			return std::unexpected(::GetLastError());
 		}
 
-		return static_cast<const ::ACE_HEADER *>(rawAce);
+		return static_cast<::ACE_HEADER *>(rawAce);
 	}
 
 	std::expected<void, DWORD> AppendAce(::ACL *acl, const ::ACE_HEADER *ace) noexcept
@@ -133,7 +132,7 @@ namespace DesktopRanger::WindowStationPolicy
 
 		for (DWORD aceIndex = 0; aceIndex < info->AceCount; ++aceIndex) {
 
-			auto ace = GetAceAt(source, aceIndex);
+			auto ace = GetAceAt(const_cast<::ACL *>(source), aceIndex);
 			if (!ace) {
 				return std::unexpected(ace.error());
 			}
@@ -172,6 +171,27 @@ namespace DesktopRanger::WindowStationPolicy
 		auto result = CopyAces(source, destination->get());
 		if (!result) {
 			return std::unexpected(result.error());
+		}
+
+		for (DWORD aceIndex = 0; aceIndex < info->AceCount; ++aceIndex) {
+
+			auto ace = GetAceAt(destination->get(), aceIndex);
+			if (!ace) {
+				return std::unexpected(ace.error());
+			}
+
+			auto aceHeader = reinterpret_cast<ACE_HEADER *>(ace.value());
+			if (aceHeader->AceType == ACCESS_ALLOWED_ACE_TYPE) {
+				auto allowed = reinterpret_cast<ACCESS_ALLOWED_ACE *>(ace.value());
+				if (allowed->Mask & WINSTA_ENUMDESKTOPS) {
+					allowed->Mask &= ~WINSTA_ENUMDESKTOPS;
+				}
+			}
+
+			auto appendResult = AppendAce(destination->get(), ace.value());
+			if (!appendResult) {
+				return std::unexpected(appendResult.error());
+			}
 		}
 
 		return destination;
