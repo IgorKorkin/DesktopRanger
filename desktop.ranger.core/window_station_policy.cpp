@@ -175,22 +175,18 @@ namespace DesktopRanger::WindowStationPolicy
 
 		for (DWORD aceIndex = 0; aceIndex < info->AceCount; ++aceIndex) {
 
-			auto ace = GetAceAt(destination->get(), aceIndex);
-			if (!ace) {
-				return std::unexpected(ace.error());
+			auto aceDestination = GetAceAt(destination->get(), aceIndex);
+			if (!aceDestination) {
+				return std::unexpected(aceDestination.error());
 			}
 
-			auto aceHeader = reinterpret_cast<ACE_HEADER *>(ace.value());
+			auto aceHeader = reinterpret_cast<ACE_HEADER *>(aceDestination.value());
 			if (aceHeader->AceType == ACCESS_ALLOWED_ACE_TYPE) {
-				auto allowed = reinterpret_cast<ACCESS_ALLOWED_ACE *>(ace.value());
+				auto allowed =
+					reinterpret_cast<ACCESS_ALLOWED_ACE *>(aceDestination.value());
 				if (allowed->Mask & WINSTA_ENUMDESKTOPS) {
 					allowed->Mask &= ~WINSTA_ENUMDESKTOPS;
 				}
-			}
-
-			auto appendResult = AppendAce(destination->get(), ace.value());
-			if (!appendResult) {
-				return std::unexpected(appendResult.error());
 			}
 		}
 
