@@ -157,4 +157,24 @@ namespace DesktopRanger::WindowStationPolicy
 		return CreateAcl(info->AclBytesInUse, source->AclRevision);
 	}
 
+	std::expected<UniqueAcl, DWORD> BuildRestrictedDacl(const ::ACL *source) noexcept
+	{
+		const auto info = GetAclSizeInformation(source);
+		if (!info) {
+			return std::unexpected(info.error());
+		}
+
+		auto destination = CreateAcl(info->AclBytesInUse, source->AclRevision);
+		if (!destination) {
+			return std::unexpected(destination.error());
+		}
+
+		auto result = CopyAces(source, destination->get());
+		if (!result) {
+			return std::unexpected(result.error());
+		}
+
+		return destination;
+	}
+
 } // namespace DesktopRanger::WindowStationPolicy

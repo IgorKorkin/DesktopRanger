@@ -46,4 +46,6 @@ namespace DesktopRanger::WindowStationPolicy
 	[[nodiscard]] std::expected<UniqueAcl, DWORD>
 	CreateEmptyAclLike(const ::ACL *source) noexcept;
 
+	[[nodiscard]] std::expected<UniqueAcl, DWORD>
+	BuildRestrictedDacl(const ::ACL *source) noexcept;
 } // namespace DesktopRanger::WindowStationPolicy
