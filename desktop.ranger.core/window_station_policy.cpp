@@ -174,7 +174,7 @@ namespace DesktopRanger::WindowStationPolicy
 			return std::unexpected(result.error());
 		}
 
-		for (auto aceIndex = 0; aceIndex < info->AceCount; ++aceIndex) {
+		for (DWORD aceIndex = 0; aceIndex < info->AceCount; ++aceIndex) {
 
 			auto aceDestination = GetAceAt(destination->get(), aceIndex);
 			if (!aceDestination) {
