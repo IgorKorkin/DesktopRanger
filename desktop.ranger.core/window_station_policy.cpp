@@ -133,7 +133,7 @@ namespace DesktopRanger::WindowStationPolicy
 
 		for (DWORD aceIndex = 0; aceIndex < info->AceCount; ++aceIndex) {
 
-			auto ace = GetAceAt(const_cast<::ACL *>(source), aceIndex);
+			auto ace = GetAceAt(source, aceIndex);
 			if (!ace) {
 				return std::unexpected(ace.error());
 			}
