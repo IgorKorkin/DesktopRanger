@@ -200,6 +200,8 @@ namespace DesktopRanger::WindowStationPolicy
 					&reinterpret_cast<::ACCESS_ALLOWED_CALLBACK_OBJECT_ACE *>(aceHeader)
 						 ->Mask;
 				break;
+			case ACCESS_ALLOWED_COMPOUND_ACE_TYPE:
+				return std::unexpected(ERROR_NOT_SUPPORTED);
 			default:
 				break;
 			}
