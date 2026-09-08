@@ -183,19 +183,26 @@ namespace DesktopRanger::WindowStationPolicy
 
 			auto aceHeader = const_cast<ACE_HEADER *>(aceDestination.value());
 
+			::ACCESS_MASK *mask{ nullptr };
 			switch (aceHeader->AceType) {
 			case ACCESS_ALLOWED_ACE_TYPE:
-			case ACCESS_ALLOWED_OBJECT_ACE_TYPE:
-			case ACCESS_ALLOWED_CALLBACK_ACE_TYPE:
-			case ACCESS_ALLOWED_CALLBACK_OBJECT_ACE_TYPE: {
-				auto allowed = reinterpret_cast<ACCESS_ALLOWED_ACE *>(aceHeader);
-				if (allowed->Mask & WINSTA_ENUMDESKTOPS) {
-					allowed->Mask &= ~WINSTA_ENUMDESKTOPS;
-				}
+				mask = &reinterpret_cast<ACCESS_ALLOWED_ACE *>(aceHeader)->Mask;
 				break;
-			}
+			case ACCESS_ALLOWED_OBJECT_ACE_TYPE:
+				mask = &reinterpret_cast<ACCESS_ALLOWED_OBJECT_ACE *>(aceHeader)->Mask;
+				break;
+			case ACCESS_ALLOWED_CALLBACK_ACE_TYPE:
+				mask = &reinterpret_cast<ACCESS_ALLOWED_CALLBACK_ACE *>(aceHeader)->Mask;
+				break;
+			case ACCESS_ALLOWED_CALLBACK_OBJECT_ACE_TYPE:
+				mask = &reinterpret_cast<ACCESS_ALLOWED_CALLBACK_OBJECT_ACE *>(aceHeader)
+							->Mask;
+				break;
 			default:
 				break;
+			}
+			if (mask) {
+				*mask &= ~WINSTA_ENUMDESKTOPS;
 			}
 		}
 
