@@ -84,18 +84,19 @@ namespace DesktopRanger::WindowStationPolicy
 		return info;
 	}
 
-	std::expected<::ACE_HEADER *, DWORD> GetAceAt(::ACL *acl, DWORD aceIndex) noexcept
+	std::expected<const ::ACE_HEADER *, DWORD> GetAceAt(const ::ACL *acl,
+														DWORD aceIndex) noexcept
 	{
 		if (!acl) {
 			return std::unexpected(ERROR_INVALID_ACL);
 		}
 
 		void *rawAce{};
-		if (!::GetAce(acl, aceIndex, &rawAce)) {
+		if (!::GetAce(const_cast<::ACL *>(acl), aceIndex, &rawAce)) {
 			return std::unexpected(::GetLastError());
 		}
 
-		return static_cast<::ACE_HEADER *>(rawAce);
+		return static_cast<const ::ACE_HEADER *>(rawAce);
 	}
 
 	std::expected<void, DWORD> AppendAce(::ACL *acl, const ::ACE_HEADER *ace) noexcept
@@ -180,10 +181,9 @@ namespace DesktopRanger::WindowStationPolicy
 				return std::unexpected(aceDestination.error());
 			}
 
-			auto aceHeader = reinterpret_cast<ACE_HEADER *>(aceDestination.value());
+			auto aceHeader = const_cast<ACE_HEADER *>(aceDestination.value());
 			if (aceHeader->AceType == ACCESS_ALLOWED_ACE_TYPE) {
-				auto allowed =
-					reinterpret_cast<ACCESS_ALLOWED_ACE *>(aceDestination.value());
+				auto allowed = reinterpret_cast<ACCESS_ALLOWED_ACE *>(aceHeader);
 				if (allowed->Mask & WINSTA_ENUMDESKTOPS) {
 					allowed->Mask &= ~WINSTA_ENUMDESKTOPS;
 				}
