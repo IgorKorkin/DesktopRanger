@@ -174,6 +174,42 @@ namespace DesktopRanger::WindowStationPolicy
 			return std::unexpected(result.error());
 		}
 
+		for (DWORD aceIndex = 0; aceIndex < info->AceCount; ++aceIndex) {
+
+			auto aceDestination = GetAceAt(destination->get(), aceIndex);
+			if (!aceDestination) {
+				return std::unexpected(aceDestination.error());
+			}
+
+			auto aceHeader = const_cast<::ACE_HEADER *>(aceDestination.value());
+
+			::ACCESS_MASK *mask{ nullptr };
+			switch (aceHeader->AceType) {
+			case ACCESS_ALLOWED_ACE_TYPE:
+				mask = &reinterpret_cast<::ACCESS_ALLOWED_ACE *>(aceHeader)->Mask;
+				break;
+			case ACCESS_ALLOWED_OBJECT_ACE_TYPE:
+				mask = &reinterpret_cast<::ACCESS_ALLOWED_OBJECT_ACE *>(aceHeader)->Mask;
+				break;
+			case ACCESS_ALLOWED_CALLBACK_ACE_TYPE:
+				mask =
+					&reinterpret_cast<::ACCESS_ALLOWED_CALLBACK_ACE *>(aceHeader)->Mask;
+				break;
+			case ACCESS_ALLOWED_CALLBACK_OBJECT_ACE_TYPE:
+				mask =
+					&reinterpret_cast<::ACCESS_ALLOWED_CALLBACK_OBJECT_ACE *>(aceHeader)
+						 ->Mask;
+				break;
+			case ACCESS_ALLOWED_COMPOUND_ACE_TYPE:
+				return std::unexpected(ERROR_NOT_SUPPORTED);
+			default:
+				break;
+			}
+			if (mask) {
+				*mask &= ~WINSTA_ENUMDESKTOPS;
+			}
+		}
+
 		return destination;
 	}
 
