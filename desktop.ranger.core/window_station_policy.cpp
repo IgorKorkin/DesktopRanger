@@ -185,7 +185,6 @@ namespace DesktopRanger::WindowStationPolicy
 
 			switch (aceHeader->AceType) {
 			case ACCESS_ALLOWED_ACE_TYPE:
-			case ACCESS_ALLOWED_COMPOUND_ACE_TYPE:
 			case ACCESS_ALLOWED_OBJECT_ACE_TYPE:
 			case ACCESS_ALLOWED_CALLBACK_ACE_TYPE:
 			case ACCESS_ALLOWED_CALLBACK_OBJECT_ACE_TYPE: {
