@@ -6,6 +6,22 @@
 
 namespace DesktopRanger::WindowStationPolicy
 {
+	::GENERIC_MAPPING mapping{
+		.GenericRead = STANDARD_RIGHTS_READ | WINSTA_ENUMDESKTOPS | WINSTA_ENUMERATE |
+					   WINSTA_READATTRIBUTES | WINSTA_READSCREEN,
+
+		.GenericWrite = STANDARD_RIGHTS_WRITE | WINSTA_ACCESSCLIPBOARD |
+						WINSTA_CREATEDESKTOP | WINSTA_WRITEATTRIBUTES,
+
+		.GenericExecute =
+			STANDARD_RIGHTS_EXECUTE | WINSTA_ACCESSGLOBALATOMS | WINSTA_EXITWINDOWS,
+
+		.GenericAll = STANDARD_RIGHTS_REQUIRED | WINSTA_ACCESSCLIPBOARD |
+					  WINSTA_ACCESSGLOBALATOMS | WINSTA_CREATEDESKTOP |
+					  WINSTA_ENUMDESKTOPS | WINSTA_ENUMERATE | WINSTA_EXITWINDOWS |
+					  WINSTA_READATTRIBUTES | WINSTA_READSCREEN | WINSTA_WRITEATTRIBUTES
+	};
+
 	std::expected<UniqueHandle, DWORD> OpenStation(std::wstring_view stationName) noexcept
 	{
 		std::wstring nullTerminatedName{ stationName };
@@ -157,6 +173,12 @@ namespace DesktopRanger::WindowStationPolicy
 		return CreateAcl(info->AclBytesInUse, source->AclRevision);
 	}
 
+	template <typename TAce>
+	[[nodiscard]] bool HasValidMask(const ::ACE_HEADER *ace) noexcept
+	{
+		return ace->AceSize >= FIELD_OFFSET(TAce, Mask) + sizeof(::ACCESS_MASK);
+	}
+
 	std::expected<UniqueAcl, DWORD> BuildRestrictedDacl(const ::ACL *source) noexcept
 	{
 		const auto info = GetAclSizeInformation(source);
@@ -185,27 +207,46 @@ namespace DesktopRanger::WindowStationPolicy
 
 			::ACCESS_MASK *mask{ nullptr };
 			switch (aceHeader->AceType) {
-			case ACCESS_ALLOWED_ACE_TYPE:
+			case ACCESS_ALLOWED_ACE_TYPE: {
+				if (!HasValidMask<::ACCESS_ALLOWED_ACE>(aceHeader)) {
+					return std::unexpected(ERROR_INVALID_ACL);
+				}
 				mask = &reinterpret_cast<::ACCESS_ALLOWED_ACE *>(aceHeader)->Mask;
 				break;
-			case ACCESS_ALLOWED_OBJECT_ACE_TYPE:
+			}
+			case ACCESS_ALLOWED_OBJECT_ACE_TYPE: {
+				if (!HasValidMask<::ACCESS_ALLOWED_OBJECT_ACE>(aceHeader)) {
+					return std::unexpected(ERROR_INVALID_ACL);
+				}
 				mask = &reinterpret_cast<::ACCESS_ALLOWED_OBJECT_ACE *>(aceHeader)->Mask;
 				break;
-			case ACCESS_ALLOWED_CALLBACK_ACE_TYPE:
+			}
+			case ACCESS_ALLOWED_CALLBACK_ACE_TYPE: {
+				if (!HasValidMask<::ACCESS_ALLOWED_CALLBACK_ACE>(aceHeader)) {
+					return std::unexpected(ERROR_INVALID_ACL);
+				}
 				mask =
 					&reinterpret_cast<::ACCESS_ALLOWED_CALLBACK_ACE *>(aceHeader)->Mask;
 				break;
-			case ACCESS_ALLOWED_CALLBACK_OBJECT_ACE_TYPE:
+			}
+			case ACCESS_ALLOWED_CALLBACK_OBJECT_ACE_TYPE: {
+				if (!HasValidMask<::ACCESS_ALLOWED_CALLBACK_OBJECT_ACE>(aceHeader)) {
+					return std::unexpected(ERROR_INVALID_ACL);
+				}
 				mask =
 					&reinterpret_cast<::ACCESS_ALLOWED_CALLBACK_OBJECT_ACE *>(aceHeader)
 						 ->Mask;
 				break;
+			}
+
 			case ACCESS_ALLOWED_COMPOUND_ACE_TYPE:
 				return std::unexpected(ERROR_NOT_SUPPORTED);
 			default:
 				break;
 			}
 			if (mask) {
+
+				::MapGenericMask(mask, &mapping);
 				*mask &= ~WINSTA_ENUMDESKTOPS;
 			}
 		}
