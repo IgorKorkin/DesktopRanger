@@ -6,7 +6,7 @@
 
 namespace DesktopRanger::WindowStationPolicy
 {
-	::GENERIC_MAPPING mapping{
+static ::GENERIC_MAPPING mapping{
 		.GenericRead = STANDARD_RIGHTS_READ | WINSTA_ENUMDESKTOPS | WINSTA_ENUMERATE |
 					   WINSTA_READATTRIBUTES | WINSTA_READSCREEN,
 
