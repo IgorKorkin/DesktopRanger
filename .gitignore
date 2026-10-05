@@ -26,6 +26,7 @@ ipch/
 
 # C and C++ compiler/linker output
 *.obj
+*.cpp.obj.*
 *.o
 *.pch
 *.pdb
