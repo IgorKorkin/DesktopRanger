@@ -49,4 +49,12 @@ namespace DesktopRanger::WindowStationPolicy
 
 	[[nodiscard]] std::expected<UniqueAcl, DWORD>
 	BuildRestrictedDacl(const ::ACL *source) noexcept;
+
+	[[nodiscard]]
+	std::expected<void, DWORD> ApplyDacl(::HWINSTA station, const ::ACL *dacl) noexcept;
+
+	[[nodiscard]]
+	std::expected<void, DWORD> RestoreDacl(::HWINSTA station,
+										   ::PSECURITY_DESCRIPTOR snapshot) noexcept;
+
 } // namespace DesktopRanger::WindowStationPolicy

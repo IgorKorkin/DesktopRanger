@@ -6,7 +6,7 @@
 
 namespace DesktopRanger::WindowStationPolicy
 {
-static ::GENERIC_MAPPING mapping{
+	static ::GENERIC_MAPPING mapping{
 		.GenericRead = STANDARD_RIGHTS_READ | WINSTA_ENUMDESKTOPS | WINSTA_ENUMERATE |
 					   WINSTA_READATTRIBUTES | WINSTA_READSCREEN,
 
@@ -252,6 +252,34 @@ static ::GENERIC_MAPPING mapping{
 		}
 
 		return destination;
+	}
+
+	std::expected<void, DWORD> ApplyDacl(::HWINSTA station, const ::ACL *dacl) noexcept
+	{
+		if (!station || !dacl) {
+			return std::unexpected(ERROR_INVALID_PARAMETER);
+		}
+
+		const auto status =
+			::SetSecurityInfo(station, SE_WINDOW_OBJECT, DACL_SECURITY_INFORMATION,
+							  nullptr, nullptr, const_cast<::ACL *>(dacl), nullptr);
+
+		if (status != ERROR_SUCCESS) {
+			return std::unexpected(status);
+		}
+
+		return {};
+	}
+
+	std::expected<void, DWORD> RestoreDacl(::HWINSTA station,
+										   ::PSECURITY_DESCRIPTOR snapshot) noexcept
+	{
+		auto originalDacl = GetDacl(snapshot);
+		if (!originalDacl) {
+			return std::unexpected(originalDacl.error());
+		}
+
+		return ApplyDacl(station, originalDacl.value());
 	}
 
 } // namespace DesktopRanger::WindowStationPolicy
