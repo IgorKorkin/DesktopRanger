@@ -308,10 +308,10 @@ namespace DesktopRanger::WindowStationPolicy
 			return std::unexpected(originalDacl.error());
 		}
 
-		// NULL DACL means unrestricted access.
-		// BuildRestrictedDacl cannot meaningfully restrict it.
+		// A NULL DACL grants unrestricted access and has no ACEs to restrict.
+		// Converting it to an empty DACL would change the access policy to deny-all.
 		if (!originalDacl.value()) {
-			return std::unexpected(ERROR_INVALID_ACL);
+			return std::unexpected(ERROR_NOT_SUPPORTED);
 		}
 
 		auto restrictedDacl = BuildRestrictedDacl(originalDacl.value());
