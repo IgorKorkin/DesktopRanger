@@ -57,4 +57,8 @@ namespace DesktopRanger::WindowStationPolicy
 	std::expected<void, DWORD> RestoreDacl(::HWINSTA station,
 										   ::PSECURITY_DESCRIPTOR snapshot) noexcept;
 
+	[[nodiscard]]
+	std::expected<UniqueSecurityDescriptor, DWORD>
+	RestrictDacl(::HWINSTA station) noexcept;
+
 } // namespace DesktopRanger::WindowStationPolicy

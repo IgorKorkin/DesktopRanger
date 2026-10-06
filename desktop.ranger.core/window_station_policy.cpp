@@ -291,4 +291,40 @@ namespace DesktopRanger::WindowStationPolicy
 		return SetDacl(station, dacl.value());
 	}
 
+	std::expected<UniqueSecurityDescriptor, DWORD>
+	RestrictDacl(::HWINSTA station) noexcept
+	{
+		if (!station) {
+			return std::unexpected(ERROR_INVALID_PARAMETER);
+		}
+
+		auto snapshot = SnapshotDacl(station);
+		if (!snapshot) {
+			return std::unexpected(snapshot.error());
+		}
+
+		auto originalDacl = GetDacl(snapshot->get());
+		if (!originalDacl) {
+			return std::unexpected(originalDacl.error());
+		}
+
+		// NULL DACL means unrestricted access.
+		// BuildRestrictedDacl cannot meaningfully restrict it.
+		if (!originalDacl.value()) {
+			return std::unexpected(ERROR_INVALID_ACL);
+		}
+
+		auto restrictedDacl = BuildRestrictedDacl(originalDacl.value());
+		if (!restrictedDacl) {
+			return std::unexpected(restrictedDacl.error());
+		}
+
+		auto result = ApplyDacl(station, restrictedDacl->get());
+		if (!result) {
+			return std::unexpected(result.error());
+		}
+
+		return snapshot;
+	}
+
 } // namespace DesktopRanger::WindowStationPolicy
