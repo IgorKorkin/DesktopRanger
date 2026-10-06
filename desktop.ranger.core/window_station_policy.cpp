@@ -6,7 +6,7 @@
 
 namespace DesktopRanger::WindowStationPolicy
 {
-static ::GENERIC_MAPPING mapping{
+	static ::GENERIC_MAPPING mapping{
 		.GenericRead = STANDARD_RIGHTS_READ | WINSTA_ENUMDESKTOPS | WINSTA_ENUMERATE |
 					   WINSTA_READATTRIBUTES | WINSTA_READSCREEN,
 
@@ -60,7 +60,7 @@ static ::GENERIC_MAPPING mapping{
 			return std::unexpected(::GetLastError());
 		}
 
-		if (!daclPresent || !dacl) {
+		if (!daclPresent) {
 			return std::unexpected(ERROR_INVALID_ACL);
 		}
 
@@ -252,6 +252,43 @@ static ::GENERIC_MAPPING mapping{
 		}
 
 		return destination;
+	}
+
+	static std::expected<void, DWORD> SetDacl(::HWINSTA station, ::ACL *dacl) noexcept
+	{
+		const auto status =
+			::SetSecurityInfo(station, SE_WINDOW_OBJECT, DACL_SECURITY_INFORMATION,
+							  nullptr, nullptr, dacl, nullptr);
+
+		if (status != ERROR_SUCCESS) {
+			return std::unexpected(status);
+		}
+
+		return {};
+	}
+
+	std::expected<void, DWORD> ApplyDacl(::HWINSTA station, const ::ACL *dacl) noexcept
+	{
+		if (!station || !dacl) {
+			return std::unexpected(ERROR_INVALID_PARAMETER);
+		}
+
+		return SetDacl(station, const_cast<::ACL *>(dacl));
+	}
+
+	std::expected<void, DWORD> RestoreDacl(::HWINSTA station,
+										   ::PSECURITY_DESCRIPTOR snapshot) noexcept
+	{
+		if (!station || !snapshot) {
+			return std::unexpected(ERROR_INVALID_PARAMETER);
+		}
+
+		auto dacl = GetDacl(snapshot);
+		if (!dacl) {
+			return std::unexpected(dacl.error());
+		}
+
+		return SetDacl(station, dacl.value());
 	}
 
 } // namespace DesktopRanger::WindowStationPolicy
