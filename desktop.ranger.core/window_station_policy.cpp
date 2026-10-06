@@ -274,6 +274,10 @@ namespace DesktopRanger::WindowStationPolicy
 	std::expected<void, DWORD> RestoreDacl(::HWINSTA station,
 										   ::PSECURITY_DESCRIPTOR snapshot) noexcept
 	{
+		if (!station || !snapshot) {
+			return std::unexpected(ERROR_INVALID_PARAMETER);
+		}
+
 		auto originalDacl = GetDacl(snapshot);
 		if (!originalDacl) {
 			return std::unexpected(originalDacl.error());
