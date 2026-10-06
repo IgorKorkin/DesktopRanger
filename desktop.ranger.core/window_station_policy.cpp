@@ -60,7 +60,7 @@ namespace DesktopRanger::WindowStationPolicy
 			return std::unexpected(::GetLastError());
 		}
 
-		if (!daclPresent || !dacl) {
+		if (!daclPresent) {
 			return std::unexpected(ERROR_INVALID_ACL);
 		}
 
@@ -254,21 +254,26 @@ namespace DesktopRanger::WindowStationPolicy
 		return destination;
 	}
 
-	std::expected<void, DWORD> ApplyDacl(::HWINSTA station, const ::ACL *dacl) noexcept
+	static std::expected<void, DWORD> SetDacl(::HWINSTA station, ::ACL *dacl) noexcept
 	{
-		if (!station || !dacl) {
-			return std::unexpected(ERROR_INVALID_PARAMETER);
-		}
-
 		const auto status =
 			::SetSecurityInfo(station, SE_WINDOW_OBJECT, DACL_SECURITY_INFORMATION,
-							  nullptr, nullptr, const_cast<::ACL *>(dacl), nullptr);
+							  nullptr, nullptr, dacl, nullptr);
 
 		if (status != ERROR_SUCCESS) {
 			return std::unexpected(status);
 		}
 
 		return {};
+	}
+
+	std::expected<void, DWORD> ApplyDacl(::HWINSTA station, const ::ACL *dacl) noexcept
+	{
+		if (!station || !dacl) {
+			return std::unexpected(ERROR_INVALID_PARAMETER);
+		}
+
+		return SetDacl(station, const_cast<::ACL *>(dacl));
 	}
 
 	std::expected<void, DWORD> RestoreDacl(::HWINSTA station,
@@ -278,12 +283,12 @@ namespace DesktopRanger::WindowStationPolicy
 			return std::unexpected(ERROR_INVALID_PARAMETER);
 		}
 
-		auto originalDacl = GetDacl(snapshot);
-		if (!originalDacl) {
-			return std::unexpected(originalDacl.error());
+		auto dacl = GetDacl(snapshot);
+		if (!dacl) {
+			return std::unexpected(dacl.error());
 		}
 
-		return ApplyDacl(station, originalDacl.value());
+		return SetDacl(station, dacl.value());
 	}
 
 } // namespace DesktopRanger::WindowStationPolicy
