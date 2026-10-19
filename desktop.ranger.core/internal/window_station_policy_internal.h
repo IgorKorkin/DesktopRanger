@@ -14,13 +14,14 @@ namespace DesktopRanger::WindowStationPolicy::detail
 
 	[[nodiscard]] std::expected<UniqueSecurityDescriptor, DWORD>
 	SnapshotDacl(::HWINSTA station, const DaclApi &api) noexcept;
-	[[nodiscard]] std::expected<void, DWORD> ApplyDacl(::HWINSTA station, const ::ACL *dacl,
-		const DaclApi &api) noexcept;
+	[[nodiscard]] std::expected<void, DWORD>
+	ApplyDacl(::HWINSTA station, const ::ACL *dacl, const DaclApi &api) noexcept;
 	[[nodiscard]] std::expected<void, DWORD> RestoreDacl(::HWINSTA station,
-		::PSECURITY_DESCRIPTOR snapshot, const DaclApi &api) noexcept;
+														 ::PSECURITY_DESCRIPTOR snapshot,
+														 const DaclApi &api) noexcept;
 	[[nodiscard]] std::expected<UniqueSecurityDescriptor, DWORD>
 	RestrictDacl(::HWINSTA station, const DaclApi &api) noexcept;
-}
+} // namespace DesktopRanger::WindowStationPolicy::detail
 
 namespace DesktopRanger::WindowStationPolicy
 {
@@ -30,7 +31,8 @@ namespace DesktopRanger::WindowStationPolicy
 	public:
 		using RestoreFailureHandler = void (*)(DWORD) noexcept;
 		explicit RestrictedSession(::HWINSTA station,
-			RestoreFailureHandler onRestoreFailure, detail::DaclApi api = {}) noexcept;
+								   RestoreFailureHandler onRestoreFailure,
+								   detail::DaclApi api = {}) noexcept;
 		~RestrictedSession() noexcept;
 		RestrictedSession(const RestrictedSession &) = delete;
 		RestrictedSession &operator=(const RestrictedSession &) = delete;
@@ -44,4 +46,4 @@ namespace DesktopRanger::WindowStationPolicy
 		detail::DaclApi api_;
 		UniqueSecurityDescriptor snapshot_;
 	};
-}
+} // namespace DesktopRanger::WindowStationPolicy

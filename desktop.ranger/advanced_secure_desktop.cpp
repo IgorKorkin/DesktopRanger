@@ -11,6 +11,7 @@
 #include <windows.h>
 
 #include "advanced_secure_desktop.h"
+#include "desktop_lifecycle.h"
 #include "desktop_name_generator.h"
 #include "security_descriptor.h"
 #include "status_logger.h"
@@ -30,7 +31,8 @@ namespace AdvancedSecureDesktop
 		if (secureDesktopInformartion.DesktopHandle) {
 			return secureDesktopInformartion.DesktopHandle;
 		}
-		return ::GetThreadDesktop(::GetCurrentThreadId());
+		const auto current = DesktopRanger::DesktopLifecycle::GetCurrentDesktop();
+		return current ? current.value() : nullptr;
 	}
 
 	std::wstring GetDesktopName()
@@ -46,69 +48,46 @@ namespace AdvancedSecureDesktop
 		return DesktopRanger::DesktopName::Generate();
 	}
 
+	void ClearDesktopInformation() noexcept
+	{
+		secureDesktopInformartion.DesktopHandle = nullptr;
+		secureDesktopInformartion.DesktopName.clear();
+	}
+
 	bool CreateNewDesktop(IN std::wstring DesktopName, OUT HDESK &DefaultDesktopHandle,
 						  OUT HDESK &SecretDesktopHandle)
 	{
-		bool result = false;
+		DefaultDesktopHandle = nullptr;
 		SecretDesktopHandle = nullptr;
-
-		DefaultDesktopHandle = ::GetThreadDesktop(::GetCurrentThreadId());
-
-		if (DefaultDesktopHandle == nullptr) {
-			LOG_ERR(L"GetThreadDesktop fail");
+		namespace Lifecycle = DesktopRanger::DesktopLifecycle;
+		const auto original = Lifecycle::GetCurrentDesktop();
+		if (!original) {
+			LOG_ERR(std::format(L"GetCurrentDesktop failed: {}", original.error()));
 			return false;
 		}
-
-		// D:P  -> защищённая DACL, пустая (никому не даём доступ)
-		DesktopRanger::SecurityDescriptor sdRestrict(L"D:P");
-		if (!sdRestrict.Initialized()) {
+		auto desktop = Lifecycle::CreateSecureDesktop(DesktopName);
+		if (!desktop) {
+			LOG_ERR(std::format(L"CreateSecureDesktop failed: {}", desktop.error()));
 			return false;
 		}
-
-		SECURITY_ATTRIBUTES saWithVeryStrictSD{
-			.nLength = sizeof(saWithVeryStrictSD),
-			.lpSecurityDescriptor = sdRestrict.GetDescriptor(),
-			.bInheritHandle = FALSE,
-		};
-
-		SecretDesktopHandle = ::CreateDesktopW(DesktopName.data(), 0, 0, 0, GENERIC_ALL,
-											   &saWithVeryStrictSD);
-
-		if (SecretDesktopHandle == nullptr) {
-			LOG_ERR(L"CreateDesktopA fail");
-		}
-
-		secureDesktopInformartion.DesktopHandle = SecretDesktopHandle;
-		secureDesktopInformartion.DesktopName = DesktopName;
-
-		return SecretDesktopHandle != nullptr;
+		secureDesktopInformartion.DesktopName = std::move(DesktopName);
+		secureDesktopInformartion.DesktopHandle = desktop->get();
+		DefaultDesktopHandle = original.value();  // Borrowed, never closed here.
+		SecretDesktopHandle = desktop->release(); // Existing caller-ownership contract.
+		return true;
 	}
 
 	bool SwitchToDesktop(IN HDESK TargetDesktopHandle)
 	{
-		if (!::SetThreadDesktop(TargetDesktopHandle)) {
-			LOG_ERR(std::format(L"SetThreadDesktop fail {:#x} ",
-								reinterpret_cast<uintptr_t>(TargetDesktopHandle)));
-
+		const auto result =
+			DesktopRanger::DesktopLifecycle::SwitchToDesktop(TargetDesktopHandle);
+		if (!result) {
+			const auto failure = result.error();
+			LOG_ERR(std::format(L"SwitchToDesktop step {} failed: {}; rollback: {}",
+								static_cast<int>(failure.step), failure.error,
+								failure.rollbackError));
 			return false;
 		}
-
-		const auto threadId = ::GetCurrentThreadId();
-		const HDESK currentDesk = ::GetThreadDesktop(threadId);
-
-		if (currentDesk != TargetDesktopHandle) {
-			LOG_ERR(
-				std::format(L"GetThreadDesktop mismatch: thread {:#x}, expected {:#x}",
-							threadId, reinterpret_cast<uintptr_t>(TargetDesktopHandle)));
-			return false;
-		}
-
-		if (!::SwitchDesktop(TargetDesktopHandle)) {
-			LOG_ERR(std::format(L"SwitchDesktop fail {:#x} ",
-								reinterpret_cast<uintptr_t>(TargetDesktopHandle)));
-			return false;
-		}
-
 		return true;
 	}
 

@@ -2,8 +2,8 @@
 
 #include <Aclapi.h>
 
-#include "window_station_policy.h"
 #include "internal/window_station_policy_internal.h"
+#include "window_station_policy.h"
 
 namespace DesktopRanger::WindowStationPolicy
 {
@@ -43,9 +43,9 @@ namespace DesktopRanger::WindowStationPolicy
 		}
 		void *rawDescriptor{};
 
-		const auto status = api.getSecurityInfo(station, ::SE_OBJECT_TYPE::SE_WINDOW_OBJECT,
-											  DACL_SECURITY_INFORMATION, nullptr, nullptr,
-											  nullptr, nullptr, &rawDescriptor);
+		const auto status = api.getSecurityInfo(
+			station, ::SE_OBJECT_TYPE::SE_WINDOW_OBJECT, DACL_SECURITY_INFORMATION,
+			nullptr, nullptr, nullptr, nullptr, &rawDescriptor);
 		if (status != ERROR_SUCCESS) {
 			return std::unexpected(status);
 		}
@@ -261,12 +261,12 @@ namespace DesktopRanger::WindowStationPolicy
 		return destination;
 	}
 
-	static std::expected<void, DWORD> SetDacl(::HWINSTA station, ::ACL *dacl,
-		const detail::DaclApi &api, SECURITY_INFORMATION information = DACL_SECURITY_INFORMATION) noexcept
+	static std::expected<void, DWORD>
+	SetDacl(::HWINSTA station, ::ACL *dacl, const detail::DaclApi &api,
+			SECURITY_INFORMATION information = DACL_SECURITY_INFORMATION) noexcept
 	{
-		const auto status =
-			api.setSecurityInfo(station, SE_WINDOW_OBJECT, information,
-							  nullptr, nullptr, dacl, nullptr);
+		const auto status = api.setSecurityInfo(station, SE_WINDOW_OBJECT, information,
+												nullptr, nullptr, dacl, nullptr);
 
 		if (status != ERROR_SUCCESS) {
 			return std::unexpected(status);
@@ -276,7 +276,7 @@ namespace DesktopRanger::WindowStationPolicy
 	}
 
 	std::expected<void, DWORD> detail::ApplyDacl(::HWINSTA station, const ::ACL *dacl,
-		const DaclApi &api) noexcept
+												 const DaclApi &api) noexcept
 	{
 		if (!station || !dacl) {
 			return std::unexpected(ERROR_INVALID_PARAMETER);
@@ -286,8 +286,8 @@ namespace DesktopRanger::WindowStationPolicy
 	}
 
 	std::expected<void, DWORD> detail::RestoreDacl(::HWINSTA station,
-										   ::PSECURITY_DESCRIPTOR snapshot,
-										   const DaclApi &api) noexcept
+												   ::PSECURITY_DESCRIPTOR snapshot,
+												   const DaclApi &api) noexcept
 	{
 		if (!station || !snapshot) {
 			return std::unexpected(ERROR_INVALID_PARAMETER);
@@ -304,8 +304,10 @@ namespace DesktopRanger::WindowStationPolicy
 			return std::unexpected(::GetLastError());
 		}
 		const auto protection = (control & SE_DACL_PROTECTED)
-			? PROTECTED_DACL_SECURITY_INFORMATION : UNPROTECTED_DACL_SECURITY_INFORMATION;
-		return SetDacl(station, dacl.value(), api, DACL_SECURITY_INFORMATION | protection);
+									? PROTECTED_DACL_SECURITY_INFORMATION
+									: UNPROTECTED_DACL_SECURITY_INFORMATION;
+		return SetDacl(station, dacl.value(), api,
+					   DACL_SECURITY_INFORMATION | protection);
 	}
 
 	std::expected<UniqueSecurityDescriptor, DWORD>
@@ -344,7 +346,8 @@ namespace DesktopRanger::WindowStationPolicy
 		return snapshot;
 	}
 
-	std::expected<UniqueSecurityDescriptor, DWORD> SnapshotDacl(::HWINSTA station) noexcept
+	std::expected<UniqueSecurityDescriptor, DWORD>
+	SnapshotDacl(::HWINSTA station) noexcept
 	{
 		return detail::SnapshotDacl(station, {});
 	}
@@ -355,19 +358,23 @@ namespace DesktopRanger::WindowStationPolicy
 	}
 
 	std::expected<void, DWORD> RestoreDacl(::HWINSTA station,
-		::PSECURITY_DESCRIPTOR snapshot) noexcept
+										   ::PSECURITY_DESCRIPTOR snapshot) noexcept
 	{
 		return detail::RestoreDacl(station, snapshot, {});
 	}
 
-	std::expected<UniqueSecurityDescriptor, DWORD> RestrictDacl(::HWINSTA station) noexcept
+	std::expected<UniqueSecurityDescriptor, DWORD>
+	RestrictDacl(::HWINSTA station) noexcept
 	{
 		return detail::RestrictDacl(station, {});
 	}
 
 	RestrictedSession::RestrictedSession(::HWINSTA station,
-		RestoreFailureHandler onRestoreFailure, detail::DaclApi api) noexcept
-		: station_(station), onRestoreFailure_(onRestoreFailure), api_(api)
+										 RestoreFailureHandler onRestoreFailure,
+										 detail::DaclApi api) noexcept
+		: station_(station)
+		, onRestoreFailure_(onRestoreFailure)
+		, api_(api)
 	{
 	}
 

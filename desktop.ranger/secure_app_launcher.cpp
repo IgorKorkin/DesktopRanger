@@ -18,10 +18,10 @@
 #include <wil/com.h>
 #include <wil/resource.h>
 
+#include "internal/window_station_policy_internal.h"
 #include "secure_app_launcher.h"
 #include "security_descriptor.h"
 #include "status_logger.h"
-#include "internal/window_station_policy_internal.h"
 
 namespace SecureApplicationLauncher
 {
@@ -369,11 +369,13 @@ namespace SecureApplicationLauncher
 				return;
 			}
 
-			// Declared after the session so Desktop is restricted before WinSta is restored.
+			// Declared after the session so Desktop is restricted before WinSta is
+			// restored.
 			bool desktopRestored = false;
 			auto restoreDesktop = wil::scope_exit([&]() noexcept {
 				if (!desktopRestored && !sdRestrict.SetDescriptor(SecretDesktopHandle)) {
-					ReportCleanupFailure(L"Restore Desktop DACL on scope exit", ::GetLastError());
+					ReportCleanupFailure(L"Restore Desktop DACL on scope exit",
+										 ::GetLastError());
 				}
 			});
 			if (!sdAllow.SetDescriptor(SecretDesktopHandle)) {

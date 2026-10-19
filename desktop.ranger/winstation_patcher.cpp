@@ -4,13 +4,13 @@
 #include <cctype>
 #include <expected>
 #include <iostream>
+#include <map>
 #include <memory>
+#include <mutex>
 #include <print>
 #include <string>
 #include <string_view>
 #include <vector>
-#include <map>
-#include <mutex>
 
 #include "internal/window_station_policy_internal.h"
 
@@ -291,14 +291,18 @@ namespace WinstationPatcher
 		Policy::RestrictedSession restriction;
 
 		explicit LegacySession(Policy::UniqueHandle handle)
-			: station(std::move(handle)), restriction(station.get(), [](DWORD) noexcept {
-				::OutputDebugStringW(L"DesktopRanger: legacy Window Station restore failed.\n");
-			}) {}
+			: station(std::move(handle))
+			, restriction(station.get(), [](DWORD) noexcept {
+				::OutputDebugStringW(
+					L"DesktopRanger: legacy Window Station restore failed.\n");
+			})
+		{
+		}
 	};
 
 	std::expected<void, DWORD> ProcessWindowStation(std::wstring_view name,
-		enum_desktop_mode mode) noexcept try
-	{
+													enum_desktop_mode mode) noexcept
+	try {
 		static std::mutex mutex;
 		static std::map<std::wstring, std::unique_ptr<LegacySession>> sessions;
 		std::lock_guard lock(mutex);
@@ -332,11 +336,9 @@ namespace WinstationPatcher
 			sessions.erase(entry);
 		}
 		return result;
-	}
-	catch (const std::bad_alloc &) {
+	} catch (const std::bad_alloc &) {
 		return std::unexpected(ERROR_NOT_ENOUGH_MEMORY);
-	}
-	catch (...) {
+	} catch (...) {
 		return std::unexpected(ERROR_GEN_FAILURE);
 	}
 

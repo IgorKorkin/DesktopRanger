@@ -18,6 +18,12 @@
     <ClInclude Include="desktop_name_generator.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="desktop_lifecycle.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="internal\desktop_lifecycle_internal.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="security_descriptor.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -30,6 +36,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="desktop_name_generator.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="desktop_lifecycle.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="security_descriptor.cpp">
