@@ -1,10 +1,13 @@
+#include <optional>
 #include <print>
+#include <thread>
 
 #include <Windows.h>
 
 #include "../simple.desktop.console/simple_secure_desktop.h"
 #include "advanced_secure_desktop.h"
 #include "control_window.h"
+#include "desktop_lifecycle.h"
 #include "secure_app_launcher.h"
 #include "status_logger.h"
 #include "winstation_patcher.h"
@@ -94,67 +97,133 @@ namespace LaunchSimpleDesktop
 
 namespace LaunchAdvancedDesktop
 {
-	HDESK DefaultDesktopHandle{};
-	HDESK SecretDesktopHandle{};
-	HWND border{};
+	namespace Lifecycle = DesktopRanger::DesktopLifecycle;
+
+	struct WorkerContext {
+		HDESK target{};
+		HDESK original{};
+		std::optional<Lifecycle::SwitchError> switchFailure;
+		Lifecycle::RestoreError restoreFailure{};
+		DWORD workerError{};
+		DWORD windowCleanupError{};
+	};
+
+	void LogDesktopError(const wchar_t *operation, DWORD error) noexcept
+	{
+		try {
+			LOG_ERR(std::format(L"{} failed: {}", operation, error));
+		} catch (...) {
+			::OutputDebugStringW(L"DesktopRanger: Desktop lifecycle error.\n");
+		}
+	}
+
+	void RunAdvancedDesktop(WorkerContext &context)
+	{
+		const auto switched = Lifecycle::SwitchToDesktop(context.target);
+		if (!switched) {
+			context.switchFailure = switched.error();
+			LogDesktopError(L"Enter secure Desktop", context.switchFailure->error);
+			if (context.switchFailure->rollbackError) {
+				LogDesktopError(L"Rollback worker Desktop binding",
+								*context.switchFailure->rollbackError);
+			}
+			return;
+		}
+
+		// The two HWND scopes below end before restoration runs on this worker.
+		auto restoreDesktop = wil::scope_exit([&]() noexcept {
+			const auto restored = Lifecycle::RestoreDesktop(context.original);
+			if (!restored) {
+				context.restoreFailure = restored.error();
+				if (context.restoreFailure.switchError) {
+					LogDesktopError(L"Restore visible Desktop",
+									*context.restoreFailure.switchError);
+				}
+				if (context.restoreFailure.threadError) {
+					LogDesktopError(L"Restore worker Desktop binding",
+									*context.restoreFailure.threadError);
+				}
+			}
+		});
+
+		const auto border = PaintScreenBorder::CreateScreenBorderWindow();
+		if (!border) {
+			context.workerError = ::GetLastError();
+			if (!context.workerError) {
+				context.workerError = ERROR_GEN_FAILURE;
+			}
+			return;
+		}
+		auto destroyBorder = wil::scope_exit([&]() noexcept {
+			if (!::DestroyWindow(border)) {
+				context.windowCleanupError = ::GetLastError();
+				if (!context.windowCleanupError) {
+					context.windowCleanupError = ERROR_GEN_FAILURE;
+				}
+				LogDesktopError(L"Destroy screen border on worker",
+								context.windowCleanupError);
+			}
+		});
+		const auto controlResult = ControlWindow::RunControlWindow();
+		if (!controlResult) {
+			context.workerError =
+				controlResult.error() ? controlResult.error() : ERROR_GEN_FAILURE;
+		}
+	}
 
 	DWORD WINAPI AdvancedDesktopThread(LPVOID param)
 	{
-		UNREFERENCED_PARAMETER(param);
-
-		auto result = BasicDesktop::SwitchToDesktop(SecretDesktopHandle);
-		if (result == false) {
-			MessageInformation("Failed SwitchToDesktop(SecretDesktopHandle)");
-			BasicDesktop::SwitchToDesktop(DefaultDesktopHandle);
-			return 0;
+		if (!param) {
+			return ERROR_INVALID_PARAMETER;
 		}
-
-		border = PaintScreenBorder::CreateScreenBorderWindow();
-
-		ControlWindow::ShowContolWindow();
-
-		// 		MessageInformation(
-		// 			"You are on the SecretDesktop!\r\nClick [OK] to switch
-		// back");
-
-		result = ::SwitchDesktop(DefaultDesktopHandle);
-		if (result == false) {
-			MessageInformation("Failed SwitchDesktop(DefaultDesktopHandle)");
-			return 0;
+		auto &context = *static_cast<WorkerContext *>(param);
+		try {
+			RunAdvancedDesktop(context);
+		} catch (...) {
+			context.workerError = ERROR_UNHANDLED_EXCEPTION;
+			LogDesktopError(L"Advanced Desktop worker", context.workerError);
 		}
-
-		return 0;
+		return (context.workerError || context.windowCleanupError ||
+				context.switchFailure || context.restoreFailure.switchError ||
+				context.restoreFailure.threadError)
+				   ? EXIT_FAILURE
+				   : EXIT_SUCCESS;
 	}
 
 	int StartAdvancedDesktop()
 	{
-		const auto SecretDesktopName = AdvancedSecureDesktop::GetRandomDesktopName();
+		try {
+			const auto name = AdvancedSecureDesktop::GetRandomDesktopName();
+			LOG_INFO(std::format(L"SecretDesktopName = \"{}\"", name));
+			HDESK original{};
+			HDESK rawDesktop{};
+			if (!AdvancedSecureDesktop::CreateNewDesktop(name, original, rawDesktop)) {
+				return EXIT_FAILURE;
+			}
+			Lifecycle::UniqueDesktop desktop{ rawDesktop };
+			auto clearInformation = wil::scope_exit(
+				[]() noexcept { AdvancedSecureDesktop::ClearDesktopInformation(); });
+			LOG_INFO(std::format(L"Secret Desktop has been created! handle {:#x}",
+								 reinterpret_cast<uintptr_t>(desktop.get())));
 
-		LOG_INFO(std::format(L"SecretDesktopName = \"{}\"", SecretDesktopName));
-
-		auto status = AdvancedSecureDesktop ::CreateNewDesktop(
-			SecretDesktopName, DefaultDesktopHandle, SecretDesktopHandle);
-
-		if (status == false) {
-			LOG_ERR(L"Failed CreateNewDesktop");
-			return 1;
+			WorkerContext context{ desktop.get(), original };
+			DWORD workerResult = EXIT_FAILURE;
+			// Join is before borrowed application state and owned HDESK are released.
+			// jthread also joins during ordinary exception unwinding.
+			{
+				std::jthread worker(
+					[&] { workerResult = AdvancedDesktopThread(&context); });
+				worker.join();
+			}
+			if (context.workerError) {
+				LogDesktopError(L"Worker GUI", context.workerError);
+			}
+			return workerResult == EXIT_SUCCESS ? EXIT_SUCCESS : EXIT_FAILURE;
+		} catch (...) {
+			LogDesktopError(L"Create or join Advanced Desktop worker",
+							ERROR_UNHANDLED_EXCEPTION);
+			return EXIT_FAILURE;
 		}
-
-		LOG_INFO(std::format(L"Secret Desktop has been created! handle {:#x}",
-							 reinterpret_cast<uintptr_t>(SecretDesktopHandle)));
-
-		const auto thread =
-			CreateThread(nullptr, 0, AdvancedDesktopThread, SecretDesktopHandle, 0, 0);
-
-		if (thread) {
-			::WaitForSingleObject(thread, INFINITE);
-			::CloseHandle(thread);
-		}
-
-		::CloseWindow(border);
-		::CloseDesktop(SecretDesktopHandle);
-
-		return 0;
 	}
 } // namespace LaunchAdvancedDesktop
 
@@ -216,7 +285,7 @@ int main()
 
 	LOG_INFO(L"Running elevated.");
 
-	LaunchAdvancedDesktop::StartAdvancedDesktop();
+	return LaunchAdvancedDesktop::StartAdvancedDesktop();
 
 	// ControlWindow::ShowContolWindow();
 

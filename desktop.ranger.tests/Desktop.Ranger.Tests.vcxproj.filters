@@ -4,6 +4,9 @@
     <ClCompile Include="desktop_name_generator_test.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="desktop_lifecycle_test.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="pch.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

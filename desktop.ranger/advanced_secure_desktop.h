@@ -11,7 +11,10 @@ namespace AdvancedSecureDesktop
 	std::wstring GetDesktopName();
 
 	std::wstring GetRandomDesktopName();
+	// Clears only borrowed application state; never closes a Desktop handle.
+	void ClearDesktopInformation() noexcept;
 
+	// On success the caller owns SecretDesktopHandle; DefaultDesktopHandle is borrowed.
 	bool CreateNewDesktop(IN std::wstring DesktopName, OUT HDESK &DefaultDesktopHandle,
 						  OUT HDESK &SecretDesktopHandle);
 

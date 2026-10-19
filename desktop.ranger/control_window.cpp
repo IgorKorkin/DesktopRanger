@@ -18,6 +18,8 @@
 
 #include "advanced_secure_desktop.h"
 #include "secure_app_launcher.h"
+#include "status_logger.h"
+#include <wil/resource.h>
 
 namespace ControlWindow
 {
@@ -300,12 +302,15 @@ namespace ControlWindow
 		return 0;
 	}
 
-	void ShowContolWindow()
+	std::expected<void, DWORD> RunControlWindow()
 	{
 		INITCOMMONCONTROLSEX icc{};
 		icc.dwSize = sizeof(icc);
 		icc.dwICC = ICC_WIN95_CLASSES;
-		InitCommonControlsEx(&icc);
+		if (!InitCommonControlsEx(&icc)) {
+			const auto error = ::GetLastError();
+			return std::unexpected(error ? error : ERROR_GEN_FAILURE);
+		}
 
 		HINSTANCE hInstance = ::GetModuleHandle(nullptr);
 
@@ -315,17 +320,42 @@ namespace ControlWindow
 		wc.lpszClassName = L"Win11Launcher";
 		wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
 		wc.hCursor = ::LoadCursor(nullptr, IDC_ARROW);
-		RegisterClass(&wc);
+		if (!RegisterClass(&wc)) {
+			const auto error = ::GetLastError();
+			if (error != ERROR_CLASS_ALREADY_EXISTS) {
+				return std::unexpected(error);
+			}
+		}
 
 		g_fontWin11 =
 			::CreateFontW(-16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
 						  OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
 						  DEFAULT_PITCH | FF_SWISS, L"Segoe UI Variable");
+		auto deleteFont = wil::scope_exit([]() noexcept {
+			if (g_fontWin11) {
+				::DeleteObject(g_fontWin11);
+			}
+			g_fontWin11 = nullptr;
+		});
 
 		const int w = 700, h = 360;
 		HWND controlWindow = ::CreateWindowExW(
 			0, L"Win11Launcher", L"Secret Desktop Launcher", WS_OVERLAPPEDWINDOW,
 			CW_USEDEFAULT, CW_USEDEFAULT, w, h, nullptr, nullptr, hInstance, nullptr);
+		if (!controlWindow) {
+			return std::unexpected(::GetLastError());
+		}
+		auto destroyControl = wil::scope_exit([&]() noexcept {
+			if (::IsWindow(controlWindow) && !::DestroyWindow(controlWindow)) {
+				const auto error = ::GetLastError();
+				try {
+					LOG_ERR(std::format(L"Destroy control window failed: {}", error));
+				} catch (...) {
+					::OutputDebugStringW(
+						L"DesktopRanger: control window cleanup failed.\n");
+				}
+			}
+		});
 
 		DWORD exStyle = ::GetWindowLong(controlWindow, GWL_EXSTYLE);
 		::SetWindowLong(controlWindow, GWL_EXSTYLE, exStyle | WS_EX_APPWINDOW);
@@ -340,11 +370,25 @@ namespace ControlWindow
 		MSG message{};
 		int result{};
 		while ((result = ::GetMessageA(&message, nullptr, 0, 0)) != 0) {
-			if (result == -1)
-				break;
+			if (result == -1) {
+				return std::unexpected(::GetLastError());
+			}
 
 			::TranslateMessage(&message);
 			::DispatchMessageA(&message);
+		}
+		if (::IsWindow(controlWindow) && !::DestroyWindow(controlWindow)) {
+			return std::unexpected(::GetLastError());
+		}
+		destroyControl.release();
+		return {};
+	}
+
+	void ShowContolWindow()
+	{
+		const auto result = RunControlWindow();
+		if (!result) {
+			LOG_ERR(std::format(L"Control window failed: {}", result.error()));
 		}
 	}
 

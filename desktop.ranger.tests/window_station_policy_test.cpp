@@ -1,14 +1,15 @@
 #include "pch.h"
 
+#include <Windows.h>
+
+#include <Sddl.h>
 #include <cstring>
 #include <stdexcept>
 #include <type_traits>
 #include <vector>
-#include <Windows.h>
-#include <Sddl.h>
 
-#include "security_descriptor.h"
 #include "internal/window_station_policy_internal.h"
+#include "security_descriptor.h"
 
 namespace DesktopRanger::Tests
 {
@@ -17,13 +18,17 @@ namespace DesktopRanger::Tests
 
 	// Keep the original public function types, including noexcept, intact.
 	static_assert(std::is_same_v<decltype(&Policy::SnapshotDacl),
-		std::expected<Policy::UniqueSecurityDescriptor, DWORD> (*)(HWINSTA) noexcept>);
+								 std::expected<Policy::UniqueSecurityDescriptor, DWORD> (
+										 *)(HWINSTA) noexcept>);
 	static_assert(std::is_same_v<decltype(&Policy::RestrictDacl),
-		std::expected<Policy::UniqueSecurityDescriptor, DWORD> (*)(HWINSTA) noexcept>);
+								 std::expected<Policy::UniqueSecurityDescriptor, DWORD> (
+										 *)(HWINSTA) noexcept>);
 	static_assert(std::is_same_v<decltype(&Policy::RestoreDacl),
-		std::expected<void, DWORD> (*)(HWINSTA, PSECURITY_DESCRIPTOR) noexcept>);
-	static_assert(std::is_same_v<decltype(&Policy::ApplyDacl),
-		std::expected<void, DWORD> (*)(HWINSTA, const ACL *) noexcept>);
+								 std::expected<void, DWORD> (*)(
+									 HWINSTA, PSECURITY_DESCRIPTOR) noexcept>);
+	static_assert(
+		std::is_same_v<decltype(&Policy::ApplyDacl),
+					   std::expected<void, DWORD> (*)(HWINSTA, const ACL *) noexcept>);
 
 	// No real Window Station or Desktop is opened by these tests. Both OS calls
 	// are replaced, even for negative-path and RAII tests.
@@ -36,14 +41,20 @@ namespace DesktopRanger::Tests
 		int failingWrite{};
 		SECURITY_INFORMATION lastInformation{};
 
-		static HWINSTA Station() { return reinterpret_cast<HWINSTA>(1); }
+		static HWINSTA Station()
+		{
+			return reinterpret_cast<HWINSTA>(1);
+		}
 
 		void SetUp() override
 		{
 			active = this;
 			Reset(L"D:P(D;;0x1;;;WD)(A;;GA;;;SY)(A;;0x2;;;BA)");
 		}
-		void TearDown() override { active = nullptr; }
+		void TearDown() override
+		{
+			active = nullptr;
+		}
 
 		void Reset(const wchar_t *sddl)
 		{
@@ -54,53 +65,72 @@ namespace DesktopRanger::Tests
 		}
 
 		static DWORD WINAPI Read(HANDLE station, SE_OBJECT_TYPE type,
-			SECURITY_INFORMATION information, PSID *, PSID *, PACL *, PACL *,
-			PSECURITY_DESCRIPTOR *descriptor)
+								 SECURITY_INFORMATION information, PSID *, PSID *, PACL *,
+								 PACL *, PSECURITY_DESCRIPTOR *descriptor)
 		{
 			EXPECT_EQ(station, Station());
 			EXPECT_EQ(type, SE_WINDOW_OBJECT);
 			EXPECT_EQ(information, DACL_SECURITY_INFORMATION);
 			++active->reads;
-			if (active->readError) { return active->readError; }
+			if (active->readError) {
+				return active->readError;
+			}
 			const auto length = ::GetSecurityDescriptorLength(active->current.get());
 			*descriptor = ::LocalAlloc(LPTR, length);
-			if (!*descriptor) { return ERROR_NOT_ENOUGH_MEMORY; }
+			if (!*descriptor) {
+				return ERROR_NOT_ENOUGH_MEMORY;
+			}
 			std::memcpy(*descriptor, active->current.get(), length);
 			return ERROR_SUCCESS;
 		}
 
 		static DWORD WINAPI Write(HANDLE station, SE_OBJECT_TYPE type,
-			SECURITY_INFORMATION information, PSID, PSID, PACL dacl, PACL)
+								  SECURITY_INFORMATION information, PSID, PSID, PACL dacl,
+								  PACL)
 		{
 			EXPECT_EQ(station, Station());
 			EXPECT_EQ(type, SE_WINDOW_OBJECT);
 			++active->writes;
 			active->lastInformation = information;
-			if (active->writeError && (!active->failingWrite || active->writes == active->failingWrite)) {
+			if (active->writeError &&
+				(!active->failingWrite || active->writes == active->failingWrite)) {
 				return active->writeError;
 			}
-			if (active->restoreError && active->writes > 1) { return active->restoreError; }
+			if (active->restoreError && active->writes > 1) {
+				return active->restoreError;
+			}
 
 			SECURITY_DESCRIPTOR descriptor{};
-			if (!::InitializeSecurityDescriptor(&descriptor, SECURITY_DESCRIPTOR_REVISION) ||
+			if (!::InitializeSecurityDescriptor(&descriptor,
+												SECURITY_DESCRIPTOR_REVISION) ||
 				!::SetSecurityDescriptorDacl(&descriptor, TRUE, dacl, FALSE)) {
 				return ::GetLastError();
 			}
 			SECURITY_DESCRIPTOR_CONTROL control{};
 			DWORD revision{};
-			if (!::GetSecurityDescriptorControl(active->current.get(), &control, &revision)) {
+			if (!::GetSecurityDescriptorControl(active->current.get(), &control,
+												&revision)) {
 				return ::GetLastError();
 			}
-			if (information & PROTECTED_DACL_SECURITY_INFORMATION) { control |= SE_DACL_PROTECTED; }
-			if (information & UNPROTECTED_DACL_SECURITY_INFORMATION) { control &= ~SE_DACL_PROTECTED; }
-			if (!::SetSecurityDescriptorControl(&descriptor, SE_DACL_PROTECTED, control & SE_DACL_PROTECTED)) {
+			if (information & PROTECTED_DACL_SECURITY_INFORMATION) {
+				control |= SE_DACL_PROTECTED;
+			}
+			if (information & UNPROTECTED_DACL_SECURITY_INFORMATION) {
+				control &= ~SE_DACL_PROTECTED;
+			}
+			if (!::SetSecurityDescriptorControl(&descriptor, SE_DACL_PROTECTED,
+												control & SE_DACL_PROTECTED)) {
 				return ::GetLastError();
 			}
 			DWORD length{};
 			::MakeSelfRelativeSD(&descriptor, nullptr, &length);
 			Policy::UniqueSecurityDescriptor copy{ ::LocalAlloc(LPTR, length) };
-			if (!copy) { return ERROR_NOT_ENOUGH_MEMORY; }
-			if (!::MakeSelfRelativeSD(&descriptor, copy.get(), &length)) { return ::GetLastError(); }
+			if (!copy) {
+				return ERROR_NOT_ENOUGH_MEMORY;
+			}
+			if (!::MakeSelfRelativeSD(&descriptor, copy.get(), &length)) {
+				return ::GetLastError();
+			}
 			active->current = std::move(copy);
 			return ERROR_SUCCESS;
 		}
@@ -111,13 +141,21 @@ namespace DesktopRanger::Tests
 			++active->reports;
 		}
 
-		static Internal::DaclApi Api() { return { &Read, &Write }; }
-		ACL *Dacl() { return Policy::GetDacl(current.get()).value(); }
+		static Internal::DaclApi Api()
+		{
+			return { &Read, &Write };
+		}
+		ACL *Dacl()
+		{
+			return Policy::GetDacl(current.get()).value();
+		}
 
 		std::vector<BYTE> DaclBytes()
 		{
 			auto dacl = Dacl();
-			if (!dacl) { return {}; }
+			if (!dacl) {
+				return {};
+			}
 			const auto begin = reinterpret_cast<const BYTE *>(dacl);
 			return { begin, begin + dacl->AclSize };
 		}
@@ -143,10 +181,14 @@ namespace DesktopRanger::Tests
 		Reset(L"D:(A;;GA;;;WD)(A;;GR;;;SY)(A;;GW;;;BA)(A;;GX;;;BU)");
 		auto restricted = Policy::BuildRestrictedDacl(Dacl());
 		ASSERT_TRUE(restricted);
-		const ACCESS_MASK read = READ_CONTROL | WINSTA_ENUMERATE | WINSTA_READATTRIBUTES | WINSTA_READSCREEN;
-		const ACCESS_MASK write = READ_CONTROL | WINSTA_ACCESSCLIPBOARD | WINSTA_CREATEDESKTOP | WINSTA_WRITEATTRIBUTES;
-		const ACCESS_MASK execute = READ_CONTROL | WINSTA_ACCESSGLOBALATOMS | WINSTA_EXITWINDOWS;
-		EXPECT_EQ(Mask(restricted->get(), 0), (STANDARD_RIGHTS_REQUIRED | WINSTA_ALL_ACCESS) & ~WINSTA_ENUMDESKTOPS);
+		const ACCESS_MASK read =
+			READ_CONTROL | WINSTA_ENUMERATE | WINSTA_READATTRIBUTES | WINSTA_READSCREEN;
+		const ACCESS_MASK write = READ_CONTROL | WINSTA_ACCESSCLIPBOARD |
+								  WINSTA_CREATEDESKTOP | WINSTA_WRITEATTRIBUTES;
+		const ACCESS_MASK execute =
+			READ_CONTROL | WINSTA_ACCESSGLOBALATOMS | WINSTA_EXITWINDOWS;
+		EXPECT_EQ(Mask(restricted->get(), 0),
+				  (STANDARD_RIGHTS_REQUIRED | WINSTA_ALL_ACCESS) & ~WINSTA_ENUMDESKTOPS);
 		EXPECT_EQ(Mask(restricted->get(), 1), read);
 		EXPECT_EQ(Mask(restricted->get(), 2), write);
 		EXPECT_EQ(Mask(restricted->get(), 3), execute);
@@ -171,39 +213,51 @@ namespace DesktopRanger::Tests
 			EXPECT_EQ(std::memcmp(before, after, sizeof(ACE_HEADER)), 0);
 			const auto offset = FIELD_OFFSET(ACCESS_ALLOWED_ACE, SidStart);
 			EXPECT_EQ(std::memcmp(reinterpret_cast<const BYTE *>(before) + offset,
-				reinterpret_cast<const BYTE *>(after) + offset, before->AceSize - offset), 0);
+								  reinterpret_cast<const BYTE *>(after) + offset,
+								  before->AceSize - offset),
+					  0);
 		}
 		const auto denied = Policy::GetAceAt(Dacl(), 0).value();
-		EXPECT_EQ(std::memcmp(denied, Policy::GetAceAt(restricted->get(), 0).value(), denied->AceSize), 0);
+		EXPECT_EQ(std::memcmp(denied, Policy::GetAceAt(restricted->get(), 0).value(),
+							  denied->AceSize),
+				  0);
 	}
 
 	TEST_F(WindowStationPolicy, RestrictsObjectAndCallbackAllowedAces)
 	{
 		// Construct ACEs in memory; no conditional-expression parser is required.
-		for (const BYTE type : { ACCESS_ALLOWED_OBJECT_ACE_TYPE, ACCESS_ALLOWED_CALLBACK_ACE_TYPE,
-			ACCESS_ALLOWED_CALLBACK_OBJECT_ACE_TYPE }) {
+		for (const BYTE type :
+			 { ACCESS_ALLOWED_OBJECT_ACE_TYPE, ACCESS_ALLOWED_CALLBACK_ACE_TYPE,
+			   ACCESS_ALLOWED_CALLBACK_OBJECT_ACE_TYPE }) {
 			auto source = Policy::CreateAcl(256, ACL_REVISION_DS);
 			ASSERT_TRUE(source);
 			SecurityDescriptor sidSource(L"D:(A;;GA;;;WD)");
-			auto sidAce = reinterpret_cast<ACCESS_ALLOWED_ACE *>(
-				const_cast<ACE_HEADER *>(Policy::GetAceAt(Policy::GetDacl(sidSource.GetDescriptor()).value(), 0).value()));
+			auto sidAce = reinterpret_cast<ACCESS_ALLOWED_ACE *>(const_cast<ACE_HEADER *>(
+				Policy::GetAceAt(Policy::GetDacl(sidSource.GetDescriptor()).value(), 0)
+					.value()));
 			const bool object = type != ACCESS_ALLOWED_CALLBACK_ACE_TYPE;
-			const DWORD sidOffset = object ? FIELD_OFFSET(ACCESS_ALLOWED_OBJECT_ACE, ObjectType)
-				: FIELD_OFFSET(ACCESS_ALLOWED_ACE, SidStart);
+			const DWORD sidOffset =
+				object ? FIELD_OFFSET(ACCESS_ALLOWED_OBJECT_ACE, ObjectType)
+					   : FIELD_OFFSET(ACCESS_ALLOWED_ACE, SidStart);
 			std::vector<BYTE> bytes(sidOffset + ::GetLengthSid(&sidAce->SidStart));
 			auto header = reinterpret_cast<ACE_HEADER *>(bytes.data());
 			header->AceType = type;
 			header->AceSize = static_cast<WORD>(bytes.size());
-			*reinterpret_cast<ACCESS_MASK *>(bytes.data() + sizeof(ACE_HEADER)) = GENERIC_ALL;
+			*reinterpret_cast<ACCESS_MASK *>(bytes.data() + sizeof(ACE_HEADER)) =
+				GENERIC_ALL;
 			ASSERT_TRUE(::CopySid(static_cast<DWORD>(bytes.size()) - sidOffset,
-				bytes.data() + sidOffset, &sidAce->SidStart));
+								  bytes.data() + sidOffset, &sidAce->SidStart));
 			ASSERT_TRUE(Policy::AppendAce(source->get(), header));
 			auto restricted = Policy::BuildRestrictedDacl(source->get());
 			ASSERT_TRUE(restricted) << static_cast<int>(type);
-			EXPECT_EQ(Mask(restricted->get(), 0), (STANDARD_RIGHTS_REQUIRED | WINSTA_ALL_ACCESS) & ~WINSTA_ENUMDESKTOPS);
+			EXPECT_EQ(Mask(restricted->get(), 0),
+					  (STANDARD_RIGHTS_REQUIRED | WINSTA_ALL_ACCESS) &
+						  ~WINSTA_ENUMDESKTOPS);
 			const auto after = Policy::GetAceAt(restricted->get(), 0).value();
 			EXPECT_EQ(std::memcmp(bytes.data() + sidOffset,
-				reinterpret_cast<const BYTE *>(after) + sidOffset, bytes.size() - sidOffset), 0);
+								  reinterpret_cast<const BYTE *>(after) + sidOffset,
+								  bytes.size() - sidOffset),
+					  0);
 		}
 	}
 
@@ -306,11 +360,13 @@ namespace DesktopRanger::Tests
 	TEST_F(WindowStationPolicy, ExceptionUnwindingRestores)
 	{
 		const auto original = DaclBytes();
-		EXPECT_THROW({
-			Policy::RestrictedSession session(Station(), &Report, Api());
-			ASSERT_TRUE(session.Restrict());
-			throw std::runtime_error("launch failed");
-		}, std::runtime_error);
+		EXPECT_THROW(
+			{
+				Policy::RestrictedSession session(Station(), &Report, Api());
+				ASSERT_TRUE(session.Restrict());
+				throw std::runtime_error("launch failed");
+			},
+			std::runtime_error);
 		EXPECT_EQ(DaclBytes(), original);
 		EXPECT_EQ(writes, 2);
 	}
@@ -401,4 +457,4 @@ namespace DesktopRanger::Tests
 		EXPECT_EQ(writes, 0);
 		EXPECT_EQ(reports, 0);
 	}
-}
+} // namespace DesktopRanger::Tests
