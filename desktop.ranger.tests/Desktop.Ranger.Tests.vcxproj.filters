@@ -16,6 +16,9 @@
     <ClCompile Include="security_descriptor_test.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="window_station_policy_test.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Header Files">

@@ -22,7 +22,9 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings" />
   <ImportGroup Label="Shared" />
-  <ImportGroup Label="PropertySheets" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="..\props\ThirdParty.props" />
+  </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <OutDir>$(SolutionDir).output\$(Configuration)\</OutDir>
@@ -105,6 +107,7 @@
       </PrecompiledHeaderOutputFile>
     </ClCompile>
     <ClCompile Include="security_descriptor_test.cpp" />
+    <ClCompile Include="window_station_policy_test.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\desktop.ranger.core\desktop.ranger.core.vcxproj">

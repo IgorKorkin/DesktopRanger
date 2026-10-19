@@ -1,4 +1,5 @@
 
+#include <atomic>
 #include <functional>
 
 #define WIN32_LEAN_AND_MEAN
@@ -20,10 +21,19 @@
 #include "secure_app_launcher.h"
 #include "security_descriptor.h"
 #include "status_logger.h"
-#include "winstation_patcher.h"
+#include "internal/window_station_policy_internal.h"
 
 namespace SecureApplicationLauncher
 {
+	// Cleanup must continue even when formatting or logging fails during unwinding.
+	void ReportCleanupFailure(const wchar_t *operation, DWORD error) noexcept
+	{
+		try {
+			LOG_ERR(std::format(L"{} failed: {}", operation, error));
+		} catch (...) {
+			::OutputDebugStringW(L"DesktopRanger: ACL restoration failed.\n");
+		}
+	}
 	struct WindowInfo {
 		HWND hwnd{};
 		std::wstring title{};
@@ -316,6 +326,14 @@ namespace SecureApplicationLauncher
 			return;
 		}
 
+		// Both launch paths pump messages and share hook state.
+		static std::atomic_flag launchInProgress = ATOMIC_FLAG_INIT;
+		if (launchInProgress.test_and_set()) {
+			LOG_ERR(L"Another secure application launch is already in progress");
+			return;
+		}
+		auto finishLaunch = wil::scope_exit([&]() noexcept { launchInProgress.clear(); });
+
 		// --- Получаем SID пользователя ---
 		const auto userSidString = GetUserSidString(::GetCurrentProcess());
 		if (userSidString.empty()) {
@@ -337,24 +355,41 @@ namespace SecureApplicationLauncher
 			DesktopName == std::wstring(L"Default")) {
 			LaunchAppAndWaitNewWindow(DesktopName, CommandLine);
 		} else {
-
-			// Step 1 - restrict winsta access
-			WinstationPatcher::RevokeWinsta();
-
-			// Step 2 - set allow permission
-			if (!sdAllow.SetDescriptor(SecretDesktopHandle))
+			namespace Policy = DesktopRanger::WindowStationPolicy;
+			auto station = Policy::OpenStation();
+			if (!station) {
+				LOG_ERR(std::format(L"OpenStation failed: {}", station.error()));
 				return;
-
-			// Step 3 - run and and wait
-			LaunchAppAndWaitNewWindow(DesktopName, CommandLine);
-
-			// Step 4 - restore Restricted permissions
-			if (!sdRestrict.SetDescriptor(SecretDesktopHandle)) {
+			}
+			Policy::RestrictedSession session(station->get(), [](DWORD error) noexcept {
+				ReportCleanupFailure(L"Restore Window Station DACL on scope exit", error);
+			});
+			if (const auto result = session.Restrict(); !result) {
+				LOG_ERR(std::format(L"RestrictDacl failed: {}", result.error()));
 				return;
 			}
 
-			// Step 5 - grant winsta access
-			WinstationPatcher::GrantWinsta();
+			// Declared after the session so Desktop is restricted before WinSta is restored.
+			bool desktopRestored = false;
+			auto restoreDesktop = wil::scope_exit([&]() noexcept {
+				if (!desktopRestored && !sdRestrict.SetDescriptor(SecretDesktopHandle)) {
+					ReportCleanupFailure(L"Restore Desktop DACL on scope exit", ::GetLastError());
+				}
+			});
+			if (!sdAllow.SetDescriptor(SecretDesktopHandle)) {
+				LOG_ERR(L"Allow Desktop access failed");
+				return;
+			}
+
+			LaunchAppAndWaitNewWindow(DesktopName, CommandLine);
+			desktopRestored = sdRestrict.SetDescriptor(SecretDesktopHandle);
+			if (!desktopRestored) {
+				ReportCleanupFailure(L"Restore Desktop DACL", ::GetLastError());
+				return; // Both cleanup guards still run, in Desktop/Window Station order.
+			}
+			if (const auto result = session.Restore(); !result) {
+				ReportCleanupFailure(L"Restore Window Station DACL", result.error());
+			}
 		}
 	}
 

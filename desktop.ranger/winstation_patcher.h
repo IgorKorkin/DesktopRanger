@@ -10,6 +10,7 @@ namespace WinstationPatcher
 
 	void RevokeWinsta();
 
+	// Restores the snapshot from RevokeWinsta; never synthesizes new permissions.
 	void GrantWinsta();
 
 } // namespace WinstationPatcher

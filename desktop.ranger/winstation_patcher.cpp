@@ -9,6 +9,10 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include <map>
+#include <mutex>
+
+#include "internal/window_station_policy_internal.h"
 
 #include <wil/resource.h>
 #include <wil/result.h>
@@ -279,115 +283,62 @@ namespace WinstationPatcher
 	}
 	// ------------------------------------------------------------
 
-	static std::expected<void, DWORD>
-	ProcessEnumDesktopMask(HWINSTA hWinSta, enum_desktop_mode mode) noexcept
-	{
-		PACL oldDacl = nullptr;
-		PSECURITY_DESCRIPTOR sd = nullptr;
+	// Compatibility entry points retain their paired revoke/grant lifecycle.
+	// Each station owns its original snapshot and a live handle until restoration.
+	namespace Policy = DesktopRanger::WindowStationPolicy;
+	struct LegacySession {
+		Policy::UniqueHandle station;
+		Policy::RestrictedSession restriction;
 
-		const DWORD status =
-			::GetSecurityInfo(hWinSta, SE_WINDOW_OBJECT, DACL_SECURITY_INFORMATION,
-							  nullptr, nullptr, &oldDacl, nullptr, &sd);
+		explicit LegacySession(Policy::UniqueHandle handle)
+			: station(std::move(handle)), restriction(station.get(), [](DWORD) noexcept {
+				::OutputDebugStringW(L"DesktopRanger: legacy Window Station restore failed.\n");
+			}) {}
+	};
 
-		if (status != ERROR_SUCCESS)
-			return std::unexpected(status);
-
-		wil::unique_any<PSECURITY_DESCRIPTOR, decltype(&::LocalFree), ::LocalFree>
-			sdHolder(sd);
-
-		if (!oldDacl)
-			return std::unexpected(ERROR_INVALID_ACL);
-
-		std::print("\n=== BEFORE ===\n");
-		DumpAcl(oldDacl);
-
-		::ACL_SIZE_INFORMATION aclInfo{};
-		if (!::GetAclInformation(oldDacl, &aclInfo, sizeof(aclInfo),
-								 AclSizeInformation)) {
-			return std::unexpected(::GetLastError());
-		}
-
-		// Создаём новый ACL такого же размера
-		const DWORD newAclSize = aclInfo.AclBytesInUse;
-
-		auto newAcl = static_cast<PACL>(::LocalAlloc(LPTR, newAclSize));
-
-		if (!newAcl)
-			return std::unexpected(::GetLastError());
-
-		wil::unique_any<PACL, decltype(&::LocalFree), ::LocalFree> newAclHolder(newAcl);
-
-		if (!::InitializeAcl(newAcl, newAclSize, ACL_REVISION)) {
-			return std::unexpected(::GetLastError());
-		}
-
-		// Копируем ACE по порядку
-		for (DWORD i = 0; i < aclInfo.AceCount; ++i) {
-			LPVOID pAce = nullptr;
-
-			if (!::GetAce(oldDacl, i, &pAce))
-				return std::unexpected(::GetLastError());
-
-			const auto header = static_cast<PACE_HEADER>(pAce);
-
-			// Копируем ACE в буфер
-			std::vector<std::byte> aceCopy(header->AceSize);
-
-			std::memcpy(aceCopy.data(), pAce, header->AceSize);
-
-			// Меняем маску только если ACCESS_ALLOWED
-			if (header->AceType == ACCESS_ALLOWED_ACE_TYPE) {
-				auto allowed = reinterpret_cast<PACCESS_ALLOWED_ACE>(aceCopy.data());
-
-				if (mode == enum_desktop_mode::grant) {
-					if (!(allowed->Mask & WINSTA_ENUMDESKTOPS)) {
-						allowed->Mask |= WINSTA_ENUMDESKTOPS;
-					}
-
-				} else if (mode == enum_desktop_mode::revoke) {
-					if (allowed->Mask & WINSTA_ENUMDESKTOPS) {
-						allowed->Mask &= ~WINSTA_ENUMDESKTOPS;
-					}
-				} else {
-					std::cout << "Unknown enum_desktop_mode \n";
-				}
-			}
-
-			if (!::AddAce(newAcl, ACL_REVISION, MAXDWORD, aceCopy.data(),
-						  header->AceSize)) {
-				return std::unexpected(::GetLastError());
-			}
-		}
-
-		std::print("\n=== AFTER ===\n");
-		DumpAcl(newAcl);
-
-		const DWORD applyStatus =
-			::SetSecurityInfo(hWinSta, SE_WINDOW_OBJECT, DACL_SECURITY_INFORMATION,
-							  nullptr, nullptr, newAcl, nullptr);
-
-		if (applyStatus != ERROR_SUCCESS)
-			return std::unexpected(applyStatus);
-
-		return {};
-	}
-
-	// ------------------------------------------------------------
-
-	[[nodiscard]]
 	std::expected<void, DWORD> ProcessWindowStation(std::wstring_view name,
-													enum_desktop_mode mode) noexcept
+		enum_desktop_mode mode) noexcept try
 	{
-		unique_hwinsta hWinSta{ ::OpenWindowStationW(name.data(), FALSE,
-													 READ_CONTROL | WRITE_DAC) };
-
-		if (!hWinSta)
-			return std::unexpected(::GetLastError());
-
-		return ProcessEnumDesktopMask(hWinSta.get(), mode);
+		static std::mutex mutex;
+		static std::map<std::wstring, std::unique_ptr<LegacySession>> sessions;
+		std::lock_guard lock(mutex);
+		const std::wstring key(name);
+		auto position = sessions.find(key);
+		if (mode == enum_desktop_mode::grant) {
+			if (position == sessions.end()) {
+				return std::unexpected(ERROR_NOT_FOUND);
+			}
+			auto result = position->second->restriction.Restore();
+			if (result) {
+				sessions.erase(position);
+			}
+			return result;
+		}
+		if (mode != enum_desktop_mode::revoke) {
+			return std::unexpected(ERROR_INVALID_PARAMETER);
+		}
+		if (position != sessions.end()) {
+			return std::unexpected(ERROR_ALREADY_EXISTS);
+		}
+		auto station = Policy::OpenStation(name);
+		if (!station) {
+			return std::unexpected(station.error());
+		}
+		auto session = std::make_unique<LegacySession>(std::move(station.value()));
+		// Allocate the registry entry before changing any ACL.
+		auto entry = sessions.emplace(key, std::move(session)).first;
+		auto result = entry->second->restriction.Restrict();
+		if (!result) {
+			sessions.erase(entry);
+		}
+		return result;
 	}
-
-	// ------------------------------------------------------------
+	catch (const std::bad_alloc &) {
+		return std::unexpected(ERROR_NOT_ENOUGH_MEMORY);
+	}
+	catch (...) {
+		return std::unexpected(ERROR_GEN_FAILURE);
+	}
 
 	void ProcessAllExistingStations(enum_desktop_mode mode)
 	{
