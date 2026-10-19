@@ -83,10 +83,12 @@ namespace AdvancedSecureDesktop
 			DesktopRanger::DesktopLifecycle::SwitchToDesktop(TargetDesktopHandle);
 		if (!result) {
 			const auto failure = result.error();
-			LOG_ERR(std::format(
-				L"SwitchToDesktop step {} failed: {}; rollback failed: {}; error: {}",
-				static_cast<int>(failure.step), failure.error,
-				failure.rollbackError.has_value(), failure.rollbackError.value_or(0)));
+			LOG_ERR(std::format(L"SwitchToDesktop step {} failed: {}",
+								static_cast<int>(failure.step), failure.error));
+			if (failure.rollbackError) {
+				LOG_ERR(std::format(L"SwitchToDesktop rollback error: {}",
+									*failure.rollbackError));
+			}
 			return false;
 		}
 		return true;
