@@ -1,7 +1,7 @@
 # PR 2: Secure Desktop Lifecycle into Core
 
 Baseline: `9a93be7` (main after PR #23). Work branch:
-`feature/complete-desktop-lifecycle`. No commit or publication is part of this stage.
+`feature/complete-desktop-lifecycle`. Changes are reviewed in PR #24.
 
 ## Scope and compatibility
 
@@ -41,7 +41,7 @@ There is no virtual hierarchy, global override, or parallel test policy.
 
 ## Safe test boundary
 
-All 30 new tests explicitly supply fake GetThreadDesktop/CreateDesktopW/
+All 35 lifecycle tests explicitly supply fake GetThreadDesktop/CreateDesktopW/
 SetThreadDesktop/SwitchDesktop callbacks. Every owned fake HDESK uses `TestOwner`,
 whose compile-time deleter is the test `Close` callback. No fake handle is ever
 adopted by production `UniqueDesktop`, and the public creation function is only
@@ -87,7 +87,7 @@ BOOL to the caller. These are explicit VM validation boundaries.
 
 ## Formatting and local build
 
-At the user's request clang-format 22.1.8 was applied to all 33 repository-owned
+At the user's request clang-format 22.1.8 was applied to all 32 repository-owned
 C++ files using the unchanged root `.clang-format`. Third-party submodules and
 generated output were excluded. Existing non-lifecycle changes are formatting;
 the Windows/Sddl include groups in the older policy test also preserve the SDK's

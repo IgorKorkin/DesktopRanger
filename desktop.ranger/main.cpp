@@ -101,8 +101,7 @@ namespace LaunchAdvancedDesktop
 	struct WorkerContext {
 		HDESK target{};
 		HDESK original{};
-		Lifecycle::SwitchError switchFailure{ Lifecycle::SwitchStep::GetOriginal,
-											  ERROR_SUCCESS };
+		std::optional<Lifecycle::SwitchError> switchFailure;
 		Lifecycle::RestoreError restoreFailure{};
 		DWORD workerError{};
 		DWORD windowCleanupError{};
@@ -122,10 +121,10 @@ namespace LaunchAdvancedDesktop
 		const auto switched = Lifecycle::SwitchToDesktop(context.target);
 		if (!switched) {
 			context.switchFailure = switched.error();
-			LogDesktopError(L"Enter secure Desktop", context.switchFailure.error);
-			if (context.switchFailure.rollbackError) {
+			LogDesktopError(L"Enter secure Desktop", context.switchFailure->error);
+			if (context.switchFailure->rollbackError) {
 				LogDesktopError(L"Rollback worker Desktop binding",
-								context.switchFailure.rollbackError);
+								*context.switchFailure->rollbackError);
 			}
 			return;
 		}
@@ -137,11 +136,11 @@ namespace LaunchAdvancedDesktop
 				context.restoreFailure = restored.error();
 				if (context.restoreFailure.switchError) {
 					LogDesktopError(L"Restore visible Desktop",
-									context.restoreFailure.switchError);
+									*context.restoreFailure.switchError);
 				}
 				if (context.restoreFailure.threadError) {
 					LogDesktopError(L"Restore worker Desktop binding",
-									context.restoreFailure.threadError);
+									*context.restoreFailure.threadError);
 				}
 			}
 		});
@@ -166,7 +165,8 @@ namespace LaunchAdvancedDesktop
 		});
 		const auto controlResult = ControlWindow::RunControlWindow();
 		if (!controlResult) {
-			context.workerError = controlResult.error();
+			context.workerError =
+				controlResult.error() ? controlResult.error() : ERROR_GEN_FAILURE;
 		}
 	}
 
@@ -183,7 +183,7 @@ namespace LaunchAdvancedDesktop
 			LogDesktopError(L"Advanced Desktop worker", context.workerError);
 		}
 		return (context.workerError || context.windowCleanupError ||
-				context.switchFailure.error || context.restoreFailure.switchError ||
+				context.switchFailure || context.restoreFailure.switchError ||
 				context.restoreFailure.threadError)
 				   ? EXIT_FAILURE
 				   : EXIT_SUCCESS;

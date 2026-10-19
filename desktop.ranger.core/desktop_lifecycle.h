@@ -2,6 +2,7 @@
 
 #include <Windows.h>
 #include <expected>
+#include <optional>
 #include <string_view>
 #include <wil/resource.h>
 
@@ -14,11 +15,12 @@ namespace DesktopRanger::DesktopLifecycle
 	struct SwitchError {
 		SwitchStep step;
 		DWORD error;
-		DWORD rollbackError{};
+		std::optional<DWORD> rollbackError;
 	};
 	struct RestoreError {
-		DWORD switchError{};
-		DWORD threadError{};
+		// Presence means failure, including an API failure with GetLastError() == 0.
+		std::optional<DWORD> switchError;
+		std::optional<DWORD> threadError;
 	};
 
 	// Borrowed handle: never pass this result to CloseDesktop or UniqueDesktop.

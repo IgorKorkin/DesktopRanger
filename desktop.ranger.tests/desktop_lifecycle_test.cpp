@@ -31,6 +31,7 @@ namespace DesktopRanger::Tests
 		int failBindCall{}, failReadCall{};
 		int reads{}, creates{}, closes{};
 		bool ignoreBinding{};
+		bool failVisible{}, failOriginalBind{};
 		std::wstring expectedName{ L"secure" };
 		std::vector<HDESK> bindings, switches, closed;
 		std::string events;
@@ -96,7 +97,8 @@ namespace DesktopRanger::Tests
 				::SetLastError(active->bindError);
 				return FALSE;
 			}
-			if (desktop == Original() && active->originalBindError) {
+			if (desktop == Original() &&
+				(active->originalBindError || active->failOriginalBind)) {
 				::SetLastError(active->originalBindError);
 				return FALSE;
 			}
@@ -111,7 +113,7 @@ namespace DesktopRanger::Tests
 			active->switches.push_back(desktop);
 			active->events += 'v';
 			::SetLastError(active->visibleError);
-			return active->visibleError ? FALSE : TRUE;
+			return (active->visibleError || active->failVisible) ? FALSE : TRUE;
 		}
 		static BOOL WINAPI Close(HDESK desktop)
 		{
@@ -244,6 +246,7 @@ namespace DesktopRanger::Tests
 		EXPECT_EQ(result.value(), Original());
 		EXPECT_EQ(bound, Target());
 		EXPECT_EQ(events, "gbgv");
+		EXPECT_EQ(switches, std::vector<HDESK>{ Target() });
 		EXPECT_EQ(closes, 0);
 	}
 	TEST_F(DesktopLifecycle, NullSwitchTargetMakesNoCalls)
@@ -271,7 +274,7 @@ namespace DesktopRanger::Tests
 		ASSERT_FALSE(result);
 		EXPECT_EQ(result.error().step, Lifecycle::SwitchStep::SetThread);
 		EXPECT_EQ(result.error().error, bindError);
-		EXPECT_EQ(result.error().rollbackError, 0);
+		EXPECT_FALSE(result.error().rollbackError);
 		EXPECT_EQ(events, "gb");
 	}
 	TEST_F(DesktopLifecycle, BindingMismatchAttemptsRollbackBeforeReturning)
@@ -281,7 +284,7 @@ namespace DesktopRanger::Tests
 		ASSERT_FALSE(result);
 		EXPECT_EQ(result.error().step, Lifecycle::SwitchStep::VerifyThread);
 		EXPECT_EQ(result.error().error, ERROR_INVALID_STATE);
-		EXPECT_EQ(result.error().rollbackError, 0);
+		EXPECT_FALSE(result.error().rollbackError);
 		EXPECT_EQ(events, "gbgb");
 	}
 	TEST_F(DesktopLifecycle, VerificationQueryErrorSurvivesSuccessfulRollback)
@@ -292,7 +295,7 @@ namespace DesktopRanger::Tests
 		ASSERT_FALSE(result);
 		EXPECT_EQ(result.error().error, readError);
 		EXPECT_EQ(bound, Original());
-		EXPECT_EQ(result.error().rollbackError, 0);
+		EXPECT_FALSE(result.error().rollbackError);
 	}
 	TEST_F(DesktopLifecycle, VisibleSwitchFailureSurvivesSuccessfulRollback)
 	{
@@ -301,7 +304,7 @@ namespace DesktopRanger::Tests
 		ASSERT_FALSE(result);
 		EXPECT_EQ(result.error().step, Lifecycle::SwitchStep::SwitchVisible);
 		EXPECT_EQ(result.error().error, visibleError);
-		EXPECT_EQ(result.error().rollbackError, 0);
+		EXPECT_FALSE(result.error().rollbackError);
 		EXPECT_EQ(bound, Original());
 		EXPECT_EQ(events, "gbgvb");
 	}
@@ -336,6 +339,7 @@ namespace DesktopRanger::Tests
 		bound = Target();
 		ASSERT_TRUE(Internal::RestoreDesktop(Original(), Api()));
 		EXPECT_EQ(events, "vbg");
+		EXPECT_EQ(switches, std::vector<HDESK>{ Original() });
 		EXPECT_EQ(bound, Original());
 		EXPECT_EQ(closes, 0);
 	}
@@ -346,7 +350,7 @@ namespace DesktopRanger::Tests
 		auto result = Internal::RestoreDesktop(Original(), Api());
 		ASSERT_FALSE(result);
 		EXPECT_EQ(result.error().switchError, ERROR_ACCESS_DENIED);
-		EXPECT_EQ(result.error().threadError, 0);
+		EXPECT_FALSE(result.error().threadError);
 		EXPECT_EQ(bound, Original());
 		EXPECT_EQ(events, "vbg");
 	}
@@ -356,9 +360,10 @@ namespace DesktopRanger::Tests
 		originalBindError = ERROR_BUSY;
 		auto result = Internal::RestoreDesktop(Original(), Api());
 		ASSERT_FALSE(result);
-		EXPECT_EQ(result.error().switchError, 0);
+		EXPECT_FALSE(result.error().switchError);
 		EXPECT_EQ(result.error().threadError, ERROR_BUSY);
 		EXPECT_EQ(events, "vb");
+		EXPECT_EQ(switches, std::vector<HDESK>{ Original() });
 	}
 	TEST_F(DesktopLifecycle, RestorePreservesBothIndependentErrors)
 	{
@@ -402,5 +407,59 @@ namespace DesktopRanger::Tests
 		EXPECT_TRUE(Internal::RestoreDesktop(Original(), Api()));
 		EXPECT_EQ(bound, Original());
 		EXPECT_EQ(closes, 0);
+	}
+
+	TEST_F(DesktopLifecycle, RestoreVisibleFailureWithZeroLastErrorIsNotSuccess)
+	{
+		failVisible = true;
+		auto result = Internal::RestoreDesktop(Original(), Api());
+		ASSERT_FALSE(result);
+		ASSERT_TRUE(result.error().switchError.has_value());
+		EXPECT_EQ(*result.error().switchError, 0);
+		EXPECT_FALSE(result.error().threadError);
+		EXPECT_EQ(switches, std::vector<HDESK>{ Original() });
+	}
+
+	TEST_F(DesktopLifecycle, RestoreBindingFailureWithZeroLastErrorIsNotSuccess)
+	{
+		failOriginalBind = true;
+		auto result = Internal::RestoreDesktop(Original(), Api());
+		ASSERT_FALSE(result);
+		EXPECT_FALSE(result.error().switchError);
+		ASSERT_TRUE(result.error().threadError.has_value());
+		EXPECT_EQ(*result.error().threadError, 0);
+	}
+
+	TEST_F(DesktopLifecycle, RestoreVerificationFailureWithZeroLastErrorIsNotSuccess)
+	{
+		failReadCall = 1;
+		auto result = Internal::RestoreDesktop(Original(), Api());
+		ASSERT_FALSE(result);
+		ASSERT_TRUE(result.error().threadError.has_value());
+		EXPECT_EQ(*result.error().threadError, 0);
+	}
+
+	TEST_F(DesktopLifecycle, RestoreRetainsBothFailuresWithZeroLastError)
+	{
+		failVisible = true;
+		failOriginalBind = true;
+		auto result = Internal::RestoreDesktop(Original(), Api());
+		ASSERT_FALSE(result);
+		ASSERT_TRUE(result.error().switchError.has_value());
+		ASSERT_TRUE(result.error().threadError.has_value());
+		EXPECT_EQ(*result.error().switchError, 0);
+		EXPECT_EQ(*result.error().threadError, 0);
+	}
+
+	TEST_F(DesktopLifecycle, SwitchAndRollbackRetainFailuresWithZeroLastError)
+	{
+		failVisible = true;
+		failOriginalBind = true;
+		auto result = Internal::SwitchToDesktop(Target(), Api());
+		ASSERT_FALSE(result);
+		EXPECT_EQ(result.error().error, 0);
+		ASSERT_TRUE(result.error().rollbackError.has_value());
+		EXPECT_EQ(*result.error().rollbackError, 0);
+		EXPECT_EQ(switches, std::vector<HDESK>{ Target() });
 	}
 } // namespace DesktopRanger::Tests
