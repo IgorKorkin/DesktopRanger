@@ -36,7 +36,7 @@ namespace DesktopRanger::WindowStationPolicy
 	}
 
 	std::expected<UniqueSecurityDescriptor, DWORD>
-	detail::SnapshotDacl(::HWINSTA station, const DaclApi &api) noexcept
+	detail::SnapshotDacl(::HANDLE station, const DaclApi &api) noexcept
 	{
 		if (!station) {
 			return std::unexpected(ERROR_INVALID_PARAMETER);
@@ -262,7 +262,7 @@ namespace DesktopRanger::WindowStationPolicy
 	}
 
 	static std::expected<void, DWORD>
-	SetDacl(::HWINSTA station, ::ACL *dacl, const detail::DaclApi &api,
+	SetDacl(::HANDLE station, ::ACL *dacl, const detail::DaclApi &api,
 			SECURITY_INFORMATION information = DACL_SECURITY_INFORMATION) noexcept
 	{
 		const auto status = api.setSecurityInfo(station, SE_WINDOW_OBJECT, information,
@@ -275,7 +275,7 @@ namespace DesktopRanger::WindowStationPolicy
 		return {};
 	}
 
-	std::expected<void, DWORD> detail::ApplyDacl(::HWINSTA station, const ::ACL *dacl,
+	std::expected<void, DWORD> detail::ApplyDacl(::HANDLE station, const ::ACL *dacl,
 												 const DaclApi &api) noexcept
 	{
 		if (!station || !dacl) {
@@ -285,7 +285,7 @@ namespace DesktopRanger::WindowStationPolicy
 		return SetDacl(station, const_cast<::ACL *>(dacl), api);
 	}
 
-	std::expected<void, DWORD> detail::RestoreDacl(::HWINSTA station,
+	std::expected<void, DWORD> detail::RestoreDacl(::HANDLE station,
 												   ::PSECURITY_DESCRIPTOR snapshot,
 												   const DaclApi &api) noexcept
 	{

@@ -1,5 +1,6 @@
 
 #include <atomic>
+#include <expected>
 #include <functional>
 
 #define WIN32_LEAN_AND_MEAN
@@ -18,9 +19,8 @@
 #include <wil/com.h>
 #include <wil/resource.h>
 
-#include "internal/window_station_policy_internal.h"
 #include "secure_app_launcher.h"
-#include "security_descriptor.h"
+#include "secure_application_launcher.h"
 #include "status_logger.h"
 
 namespace SecureApplicationLauncher
@@ -169,8 +169,8 @@ namespace SecureApplicationLauncher
 		return exePath;
 	}
 
-	void LaunchAppAndWaitNewWindow(IN std::wstring DesktopName,
-								   IN std::wstring CommandLine)
+	static void LaunchAndWait(HDESK desktop, bool applyPolicy,
+							  IN std::wstring DesktopName, IN std::wstring CommandLine)
 	{
 		LOG_INFO(std::format(L"LaunchAppAndWaitNewWindow \"{}\"", CommandLine));
 
@@ -198,9 +198,7 @@ namespace SecureApplicationLauncher
 			return;
 		}
 
-		// CommandLine должен быть writable
-		std::vector<wchar_t> cmdBuffer(exeCommandLine.begin(), exeCommandLine.end());
-		cmdBuffer.push_back(0);
+		g_NewWindowFound = false;
 
 		// Ставим хук на все новые окна на рабочем столе
 		const auto newWindowHook =
@@ -216,26 +214,15 @@ namespace SecureApplicationLauncher
 		}
 
 		// RAII для автоматического снятия хука
-		auto unhookOnExit = wil::scope_exit([&] {
+		auto unhookOnExit = wil::scope_exit([&]() noexcept {
 			if (!::UnhookWinEvent(newWindowHook)) {
-				LOG_ERR(std::format(L"Failed to unhook event: {}", GetLastError()));
+				ReportCleanupFailure(L"UnhookWinEvent", ::GetLastError());
 			}
 		});
 
-		PROCESS_INFORMATION processInformation{};
-		STARTUPINFOW startupInformation{};
-		startupInformation.cb = sizeof(startupInformation);
-		startupInformation.lpDesktop = const_cast<wchar_t *>(DesktopName.data());
-		startupInformation.dwFlags = STARTF_USESHOWWINDOW;
-		startupInformation.wShowWindow = SW_SHOW;
-
-		LOG_INFO(std::format(L"CreateProcessA \"{}\"", cmdBuffer.data()));
-		const auto status =
-			::CreateProcessW(nullptr, cmdBuffer.data(), nullptr, nullptr, 0, 0, nullptr,
-							 nullptr, &startupInformation, &processInformation);
-
-		if (status && processInformation.hProcess && processInformation.hThread) {
-
+		namespace Launcher = DesktopRanger::SecureApplicationLauncher;
+		auto waitForWindow = [&](const PROCESS_INFORMATION &processInformation)
+			-> std::expected<void, DWORD> {
 			DWORD waitMaxDurationMs = 5000; // 7 секунд
 
 			const auto result =
@@ -275,46 +262,42 @@ namespace SecureApplicationLauncher
 				LOG_INFO(L"No new window appeared within timeout for process");
 			}
 
-		} else {
-			LOG_ERR(std::format(L"CreateProcessA  failed \"{}\"", CommandLine));
+			return {};
+		};
+		const auto result =
+			applyPolicy
+				? Launcher::LaunchApplication(desktop, DesktopName, exeCommandLine,
+											  waitForWindow)
+				: Launcher::CreateApplication(DesktopName, exeCommandLine, waitForWindow);
+		if (!result) {
+			const auto &error = result.error();
+			LOG_ERR(std::format(L"Application launch failed; PID: {}", error.processId));
+			if (error.failure) {
+				ReportCleanupFailure(L"Application launch/callback",
+									 error.failure->error);
+			}
+			if (error.desktopRestoreError) {
+				ReportCleanupFailure(L"Restore Desktop DACL", *error.desktopRestoreError);
+			}
+			if (error.stationRestoreError) {
+				ReportCleanupFailure(L"Restore Window Station DACL",
+									 *error.stationRestoreError);
+			}
 		}
 	}
 
-	std::wstring GetUserSidString(HANDLE processHandle)
+	// Both public entry points share hook state and may pump reentrant messages.
+	static std::atomic_flag launchInProgress = ATOMIC_FLAG_INIT;
+
+	void LaunchAppAndWaitNewWindow(IN std::wstring DesktopName,
+								   IN std::wstring CommandLine)
 	{
-		if (!processHandle) {
-			LOG_ERR(L"Invalid process handle");
-			return {};
+		if (launchInProgress.test_and_set()) {
+			LOG_ERR(L"Another application launch is already in progress");
+			return;
 		}
-
-		wil::unique_handle token;
-		if (!::OpenProcessToken(processHandle, TOKEN_QUERY, token.addressof())) {
-			LOG_ERR(L"OpenProcessToken failed");
-			return {};
-		}
-
-		DWORD size{};
-		::GetTokenInformation(token.get(), TokenUser, nullptr, 0, &size);
-		if (GetLastError() != ERROR_INSUFFICIENT_BUFFER) {
-			LOG_ERR(L"GetTokenInformation failed");
-			return {};
-		}
-
-		std::vector<BYTE> buffer(size);
-		if (!::GetTokenInformation(token.get(), TokenUser, buffer.data(), size, &size)) {
-			LOG_ERR(L"GetTokenInformation failed");
-			return {};
-		}
-
-		wchar_t *sid{};
-		if (!::ConvertSidToStringSidW(
-				reinterpret_cast<TOKEN_USER *>(buffer.data())->User.Sid, &sid)) {
-			LOG_ERR(L"ConvertSidToStringSidA failed");
-			return {};
-		}
-
-		std::unique_ptr<wchar_t, decltype(&::LocalFree)> freeOnExit(sid, ::LocalFree);
-		return sid;
+		auto finish = wil::scope_exit([&]() noexcept { launchInProgress.clear(); });
+		LaunchAndWait(nullptr, false, std::move(DesktopName), std::move(CommandLine));
 	}
 
 	void LaunchAppOnSecureDesktop(IN HDESK SecretDesktopHandle,
@@ -325,74 +308,12 @@ namespace SecureApplicationLauncher
 			LOG_ERR(L"Invalid input");
 			return;
 		}
-
-		// Both launch paths pump messages and share hook state.
-		static std::atomic_flag launchInProgress = ATOMIC_FLAG_INIT;
 		if (launchInProgress.test_and_set()) {
 			LOG_ERR(L"Another secure application launch is already in progress");
 			return;
 		}
-		auto finishLaunch = wil::scope_exit([&]() noexcept { launchInProgress.clear(); });
-
-		// --- Получаем SID пользователя ---
-		const auto userSidString = GetUserSidString(::GetCurrentProcess());
-		if (userSidString.empty()) {
-			return;
-		}
-
-		DesktopRanger::SecurityDescriptor sdAllow(
-			std::format(L"D:(A;;GA;;;{})", userSidString));
-		if (!sdAllow.Initialized()) {
-			return;
-		}
-
-		DesktopRanger::SecurityDescriptor sdRestrict(L"D:P");
-		if (!sdRestrict.Initialized()) {
-			return;
-		}
-
-		if (SecretDesktopHandle == ::GetThreadDesktop(::GetCurrentThreadId()) &&
-			DesktopName == std::wstring(L"Default")) {
-			LaunchAppAndWaitNewWindow(DesktopName, CommandLine);
-		} else {
-			namespace Policy = DesktopRanger::WindowStationPolicy;
-			auto station = Policy::OpenStation();
-			if (!station) {
-				LOG_ERR(std::format(L"OpenStation failed: {}", station.error()));
-				return;
-			}
-			Policy::RestrictedSession session(station->get(), [](DWORD error) noexcept {
-				ReportCleanupFailure(L"Restore Window Station DACL on scope exit", error);
-			});
-			if (const auto result = session.Restrict(); !result) {
-				LOG_ERR(std::format(L"RestrictDacl failed: {}", result.error()));
-				return;
-			}
-
-			// Declared after the session so Desktop is restricted before WinSta is
-			// restored.
-			bool desktopRestored = false;
-			auto restoreDesktop = wil::scope_exit([&]() noexcept {
-				if (!desktopRestored && !sdRestrict.SetDescriptor(SecretDesktopHandle)) {
-					ReportCleanupFailure(L"Restore Desktop DACL on scope exit",
-										 ::GetLastError());
-				}
-			});
-			if (!sdAllow.SetDescriptor(SecretDesktopHandle)) {
-				LOG_ERR(L"Allow Desktop access failed");
-				return;
-			}
-
-			LaunchAppAndWaitNewWindow(DesktopName, CommandLine);
-			desktopRestored = sdRestrict.SetDescriptor(SecretDesktopHandle);
-			if (!desktopRestored) {
-				ReportCleanupFailure(L"Restore Desktop DACL", ::GetLastError());
-				return; // Both cleanup guards still run, in Desktop/Window Station order.
-			}
-			if (const auto result = session.Restore(); !result) {
-				ReportCleanupFailure(L"Restore Window Station DACL", result.error());
-			}
-		}
+		auto finish = wil::scope_exit([&]() noexcept { launchInProgress.clear(); });
+		LaunchAndWait(SecretDesktopHandle, true, std::move(DesktopName),
+					  std::move(CommandLine));
 	}
-
 } // namespace SecureApplicationLauncher
