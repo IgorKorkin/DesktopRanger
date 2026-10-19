@@ -83,8 +83,24 @@ namespace AdvancedSecureDesktop
 			DesktopRanger::DesktopLifecycle::SwitchToDesktop(TargetDesktopHandle);
 		if (!result) {
 			const auto failure = result.error();
-			LOG_ERR(std::format(L"SwitchToDesktop step {} failed: {}",
-								static_cast<int>(failure.step), failure.error));
+			using DesktopRanger::DesktopLifecycle::SwitchStep;
+			const wchar_t *stepName = L"Unknown";
+			switch (failure.step) {
+			case SwitchStep::GetOriginal:
+				stepName = L"GetOriginal";
+				break;
+			case SwitchStep::SetThread:
+				stepName = L"SetThread";
+				break;
+			case SwitchStep::VerifyThread:
+				stepName = L"VerifyThread";
+				break;
+			case SwitchStep::SwitchVisible:
+				stepName = L"SwitchVisible";
+				break;
+			}
+			LOG_ERR(std::format(L"SwitchToDesktop step {} failed: {}", stepName,
+								failure.error));
 			if (failure.rollbackError) {
 				LOG_ERR(std::format(L"SwitchToDesktop rollback error: {}",
 									*failure.rollbackError));
