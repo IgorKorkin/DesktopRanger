@@ -17,6 +17,7 @@ ipch/
 # Build output directories
 .output/
 .intermediate/
+x64/
 
 # C and C++ Build-specific files
 *.exe
