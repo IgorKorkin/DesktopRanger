@@ -326,6 +326,14 @@ namespace SecureApplicationLauncher
 			return;
 		}
 
+		// Both launch paths pump messages and share hook state.
+		static std::atomic_flag launchInProgress = ATOMIC_FLAG_INIT;
+		if (launchInProgress.test_and_set()) {
+			LOG_ERR(L"Another secure application launch is already in progress");
+			return;
+		}
+		auto finishLaunch = wil::scope_exit([&]() noexcept { launchInProgress.clear(); });
+
 		// --- Получаем SID пользователя ---
 		const auto userSidString = GetUserSidString(::GetCurrentProcess());
 		if (userSidString.empty()) {
@@ -347,14 +355,6 @@ namespace SecureApplicationLauncher
 			DesktopName == std::wstring(L"Default")) {
 			LaunchAppAndWaitNewWindow(DesktopName, CommandLine);
 		} else {
-			// The message pump can reenter the launcher. Never overlap ACL sessions.
-			static std::atomic_flag launchInProgress = ATOMIC_FLAG_INIT;
-			if (launchInProgress.test_and_set()) {
-				LOG_ERR(L"Another secure application launch is already in progress");
-				return;
-			}
-			auto finishLaunch = wil::scope_exit([&]() noexcept { launchInProgress.clear(); });
-
 			namespace Policy = DesktopRanger::WindowStationPolicy;
 			auto station = Policy::OpenStation();
 			if (!station) {

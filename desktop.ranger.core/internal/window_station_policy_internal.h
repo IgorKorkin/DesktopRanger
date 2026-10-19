@@ -12,13 +12,13 @@ namespace DesktopRanger::WindowStationPolicy::detail
 		decltype(&::SetSecurityInfo) setSecurityInfo{ &::SetSecurityInfo };
 	};
 
-	std::expected<UniqueSecurityDescriptor, DWORD>
+	[[nodiscard]] std::expected<UniqueSecurityDescriptor, DWORD>
 	SnapshotDacl(::HWINSTA station, const DaclApi &api) noexcept;
-	std::expected<void, DWORD> ApplyDacl(::HWINSTA station, const ::ACL *dacl,
+	[[nodiscard]] std::expected<void, DWORD> ApplyDacl(::HWINSTA station, const ::ACL *dacl,
 		const DaclApi &api) noexcept;
-	std::expected<void, DWORD> RestoreDacl(::HWINSTA station,
+	[[nodiscard]] std::expected<void, DWORD> RestoreDacl(::HWINSTA station,
 		::PSECURITY_DESCRIPTOR snapshot, const DaclApi &api) noexcept;
-	std::expected<UniqueSecurityDescriptor, DWORD>
+	[[nodiscard]] std::expected<UniqueSecurityDescriptor, DWORD>
 	RestrictDacl(::HWINSTA station, const DaclApi &api) noexcept;
 }
 

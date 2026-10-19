@@ -14,7 +14,7 @@ to `D:P` afterwards. Only Window Station enumeration rights are restricted.
 | `ProcessWindowStation`, `ProcessOnlyWinsta0`, `ProcessAllExistingStations` | Retained, using Core sessions; repeated revoke rejected without losing original snapshot | Shared session tests; enumeration/all-stations scenario awaits VM |
 | `IsProcessElevated`, `IsRunningAsSystemNtAuthority` | Unchanged | Compilation; token scenarios await VM |
 | `get_error_message`, `PrintAccessRights`, `GetNameSidType`, `PrintSidInfo`, `DumpAcl`, `DumpWindowStationDacl` | Diagnostic functions retained unchanged | Source comparison; runtime diagnostics await VM |
-| `OpenStation` | Unchanged; live `READ_CONTROL | WRITE_DAC` handle outlives session | Compilation; opening actual stations awaits VM |
+| `OpenStation` | Unchanged; live `READ_CONTROL \| WRITE_DAC` handle outlives session | Compilation; opening actual stations awaits VM |
 | `SnapshotDacl`, `GetDacl`, `ApplyDacl`, `RestrictDacl`, `RestoreDacl` | Original public signatures retained; OS substitution is internal; restoration includes original DACL protection flag | Public function types checked at compilation; shared production implementation tested through an in-memory OS boundary, exact ACL comparison, NULL/empty distinction, failure propagation |
 | `CreateAcl`, `GetAclSizeInformation`, `GetAceAt`, `AppendAce`, `CopyAces`, `CreateEmptyAclLike`, `BuildRestrictedDacl` | Existing ACL transformation retained | Explicit/generic masks, allow/object/callback ACEs, denied ACE, SID/flags/order preservation, source immutability, empty/unsupported ACL cases |
 

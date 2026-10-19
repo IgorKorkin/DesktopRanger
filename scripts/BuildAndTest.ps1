@@ -40,8 +40,15 @@ try {
     }
     $testExecutable = Join-Path $Repository ".output\$Configuration\Desktop.Ranger.Tests.exe"
     if (-not (Test-Path -LiteralPath $testExecutable -PathType Leaf)) { throw "Test executable not found: $testExecutable" }
-    & $testExecutable "--gtest_filter=$TestFilter" "--gtest_output=xml:$testXml" 2>&1 | Tee-Object -FilePath $testLog
-    $testExit = $LASTEXITCODE
+    # Windows PowerShell 5.1 turns redirected native stderr into ErrorRecords.
+    # Keep collecting output and judge the native process by its exit code.
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        & $testExecutable "--gtest_filter=$TestFilter" "--gtest_output=xml:$testXml" 2>&1 | Tee-Object -FilePath $testLog -ErrorAction Stop
+        $testExit = $LASTEXITCODE
+    }
+    finally { $ErrorActionPreference = $previousErrorActionPreference }
     if ($testExit -ne 0) {
         $result = $testExit
         throw "GoogleTest failed ($result). Log: $testLog"
