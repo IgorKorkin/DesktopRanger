@@ -75,22 +75,29 @@ namespace DesktopRanger::DesktopLifecycle
 	std::expected<void, RestoreError>
 	detail::RestoreDesktop(HDESK original, const DesktopApi &api) noexcept
 	{
-		if (!original) {
+		return detail::RestoreDesktop(original, original, api);
+	}
+
+	std::expected<void, RestoreError>
+	detail::RestoreDesktop(HDESK visibleOriginal, HDESK threadOriginal,
+						   const DesktopApi &api) noexcept
+	{
+		if (!visibleOriginal || !threadOriginal) {
 			return std::unexpected(
 				RestoreError{ ERROR_INVALID_HANDLE, ERROR_INVALID_HANDLE });
 		}
 		RestoreError failure{};
 		// Restore the visible desktop even if a remaining hook prevents rebinding.
-		if (!api.switchDesktop(original)) {
+		if (!api.switchDesktop(visibleOriginal)) {
 			failure.switchError = ::GetLastError();
 		}
-		if (!api.setThreadDesktop(original)) {
+		if (!api.setThreadDesktop(threadOriginal)) {
 			failure.threadError = ::GetLastError();
 		} else {
 			const auto bound = detail::GetCurrentDesktop(api);
 			if (!bound) {
 				failure.threadError = bound.error();
-			} else if (bound.value() != original) {
+			} else if (bound.value() != threadOriginal) {
 				failure.threadError = ERROR_INVALID_STATE;
 			}
 		}
@@ -115,5 +122,10 @@ namespace DesktopRanger::DesktopLifecycle
 	std::expected<void, RestoreError> RestoreDesktop(HDESK original) noexcept
 	{
 		return detail::RestoreDesktop(original, {});
+	}
+	std::expected<void, RestoreError> RestoreDesktop(HDESK visibleOriginal,
+													 HDESK threadOriginal) noexcept
+	{
+		return detail::RestoreDesktop(visibleOriginal, threadOriginal, {});
 	}
 } // namespace DesktopRanger::DesktopLifecycle

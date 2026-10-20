@@ -33,4 +33,7 @@ namespace DesktopRanger::DesktopLifecycle::detail
 	SwitchToDesktop(HDESK target, const DesktopApi &api) noexcept;
 	[[nodiscard]] std::expected<void, RestoreError>
 	RestoreDesktop(HDESK original, const DesktopApi &api) noexcept;
+	[[nodiscard]] std::expected<void, RestoreError>
+	RestoreDesktop(HDESK visibleOriginal, HDESK threadOriginal,
+				   const DesktopApi &api) noexcept;
 } // namespace DesktopRanger::DesktopLifecycle::detail

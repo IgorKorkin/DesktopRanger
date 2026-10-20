@@ -7,6 +7,7 @@
     <ClCompile Include="desktop_lifecycle_test.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="process_elevation_test.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="pch.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

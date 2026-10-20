@@ -26,5 +26,6 @@
     <ClInclude Include="simple_secure_desktop.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\desktop.ranger.gui\paint_screen_border.h"><Filter>Header Files</Filter></ClInclude>
   </ItemGroup>
 </Project>

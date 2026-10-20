@@ -15,7 +15,6 @@
 #include "desktop_name_generator.h"
 #include "security_descriptor.h"
 #include "status_logger.h"
-#include "winstation_patcher.h"
 
 namespace AdvancedSecureDesktop
 {

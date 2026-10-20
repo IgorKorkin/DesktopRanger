@@ -59,6 +59,7 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpplatest</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\external\wil\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -74,6 +75,7 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpplatest</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\external\wil\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -86,6 +88,15 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="simple_secure_desktop.h" />
+    <ClInclude Include="..\desktop.ranger.gui\paint_screen_border.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\desktop.ranger.core\desktop.ranger.core.vcxproj">
+      <Project>{8b80b052-8d00-44b6-af5a-a9785c26142a}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\desktop.ranger.gui\desktop.ranger.gui.vcxproj">
+      <Project>{7F96D9A7-7B82-4FA2-93E5-4D35E5E4AB41}</Project>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

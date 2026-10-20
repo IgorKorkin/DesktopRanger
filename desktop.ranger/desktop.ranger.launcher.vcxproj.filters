@@ -21,16 +21,14 @@
     <ClCompile Include="advanced_secure_desktop.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="winstation_patcher.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="status_logger.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\simple.desktop.console\simple_secure_desktop.cpp">
+    <ClCompile Include="..\desktop.ranger.gui\paint_screen_border.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="secure_app_launcher.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="secure_app_launcher.cpp">
+    <ClCompile Include="..\simple.desktop.console\simple_secure_desktop.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="control_window.cpp">
@@ -41,12 +39,10 @@
     <ClInclude Include="advanced_secure_desktop.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="winstation_patcher.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="status_logger.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\desktop.ranger.gui\paint_screen_border.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="..\simple.desktop.console\simple_secure_desktop.h">
       <Filter>Header Files</Filter>
     </ClInclude>
