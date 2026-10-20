@@ -214,6 +214,10 @@ int main(int argc, char *argv[])
 				LOG_ERR(std::format(L"Simple Desktop worker restore failed: {}",
 									*error.threadRestoreError));
 			}
+			if (error.notificationError) {
+				LOG_ERR(std::format(L"Simple Desktop error notification failed: {}",
+									*error.notificationError));
+			}
 			return EXIT_FAILURE;
 		}
 		return EXIT_SUCCESS;

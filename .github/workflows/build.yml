@@ -58,6 +58,16 @@ jobs:
             /p:Platform=x64 `
             /p:TreatWarningsAsErrors=false
 
+      - name: Build standalone Simple Desktop
+        shell: pwsh
+        run: |
+          & "$env:MSBUILD_PATH" .\simple.desktop.console\simple.desktop.console.vcxproj `
+            /m `
+            "/p:SolutionDir=$env:GITHUB_WORKSPACE\" `
+            /p:Configuration=Release `
+            /p:Platform=x64
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Run unit tests
         shell: pwsh
         run: |

@@ -19,12 +19,14 @@ namespace SimpleSecureDesktop
 		std::optional<DWORD> windowCleanupError;
 		std::optional<DWORD> visibleRestoreError;
 		std::optional<DWORD> threadRestoreError;
+		std::optional<DWORD> notificationError;
 	};
 
 	bool CreateNewDesktop(IN const wchar_t *DesktopName, OUT HDESK &DefaultDesktopHandle,
 						  OUT HDESK &SecretDesktopHandle);
 
-	void LaunchAppOnDesktop(IN const wchar_t *DesktopName, IN wchar_t *CommandLine);
+	[[nodiscard]] std::expected<void, DWORD>
+	LaunchAppOnDesktop(IN const wchar_t *DesktopName, IN wchar_t *CommandLine);
 	[[nodiscard]] std::expected<void, RunError> RunSimpleDesktop();
 
 } // namespace SimpleSecureDesktop

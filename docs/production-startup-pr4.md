@@ -38,6 +38,18 @@ handles are not closed. No real Desktop or UI switching is performed by the unit
 The border is created and destroyed by its owning worker thread. Destroying the border does
 not post `WM_QUIT`; the control window owns its message loop.
 
+Simple Desktop propagates process creation and startup-message errors. After destroying
+worker windows, it attempts restoration and retries once on failure while the owned target
+Desktop is still alive. First restoration errors remain separate from the operation error;
+diagnostics include the retry result. Persistent failures are reported on the active Desktop
+with `MB_SERVICE_NOTIFICATION` and to stderr/debug output. Failure of this notification is
+also returned. The standalone main prints diagnostics rather than opening a modal window on
+a possibly hidden Desktop. This is a bounded recovery attempt, not guaranteed restoration.
+
+All repository-owned projects use MSVC v145. CI explicitly builds the standalone Simple
+Desktop project without a toolset override, since that project is not in DesktopRanger.sln.
+The GUI rejects a border color equal to its magenta transparency key before creating windows.
+
 ## VMware follow-up
 
 On a disposable Windows VM, verify normal entry/exit from Advanced Secure Desktop,

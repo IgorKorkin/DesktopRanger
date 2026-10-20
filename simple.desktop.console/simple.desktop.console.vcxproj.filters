@@ -23,6 +23,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="internal\simple_desktop_internal.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="simple_secure_desktop.h">
       <Filter>Header Files</Filter>
     </ClInclude>

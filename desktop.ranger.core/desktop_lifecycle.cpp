@@ -82,16 +82,16 @@ namespace DesktopRanger::DesktopLifecycle
 	detail::RestoreDesktop(HDESK visibleOriginal, HDESK threadOriginal,
 						   const DesktopApi &api) noexcept
 	{
-		if (!visibleOriginal || !threadOriginal) {
-			return std::unexpected(
-				RestoreError{ ERROR_INVALID_HANDLE, ERROR_INVALID_HANDLE });
-		}
 		RestoreError failure{};
 		// Restore the visible desktop even if a remaining hook prevents rebinding.
-		if (!api.switchDesktop(visibleOriginal)) {
+		if (!visibleOriginal) {
+			failure.switchError = ERROR_INVALID_HANDLE;
+		} else if (!api.switchDesktop(visibleOriginal)) {
 			failure.switchError = ::GetLastError();
 		}
-		if (!api.setThreadDesktop(threadOriginal)) {
+		if (!threadOriginal) {
+			failure.threadError = ERROR_INVALID_HANDLE;
+		} else if (!api.setThreadDesktop(threadOriginal)) {
 			failure.threadError = ::GetLastError();
 		} else {
 			const auto bound = detail::GetCurrentDesktop(api);

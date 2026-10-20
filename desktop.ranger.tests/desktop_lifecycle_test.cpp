@@ -432,6 +432,46 @@ namespace DesktopRanger::Tests
 		ASSERT_FALSE(result);
 		EXPECT_EQ(result.error().threadError, readError);
 	}
+	TEST_F(DesktopLifecycle, MissingVisibleHandleStillRestoresWorkerBinding)
+	{
+		bound = Target();
+		const auto result = Internal::RestoreDesktop(nullptr, Original(), Api());
+		ASSERT_FALSE(result);
+		EXPECT_EQ(result.error().switchError, ERROR_INVALID_HANDLE);
+		EXPECT_FALSE(result.error().threadError);
+		EXPECT_EQ(bound, Original());
+		EXPECT_TRUE(switches.empty());
+		EXPECT_EQ(bindings, std::vector<HDESK>{ Original() });
+		EXPECT_EQ(closes, 0);
+	}
+	TEST_F(DesktopLifecycle, MissingWorkerHandleStillRestoresVisibleDesktop)
+	{
+		const auto result = Internal::RestoreDesktop(CallerDesktop(), nullptr, Api());
+		ASSERT_FALSE(result);
+		EXPECT_FALSE(result.error().switchError);
+		EXPECT_EQ(result.error().threadError, ERROR_INVALID_HANDLE);
+		EXPECT_EQ(switches, std::vector<HDESK>{ CallerDesktop() });
+		EXPECT_TRUE(bindings.empty());
+		EXPECT_EQ(closes, 0);
+	}
+	TEST_F(DesktopLifecycle, MissingVisibleHandleKeepsWorkerApiFailure)
+	{
+		originalBindError = ERROR_BUSY;
+		const auto result = Internal::RestoreDesktop(nullptr, Original(), Api());
+		ASSERT_FALSE(result);
+		EXPECT_EQ(result.error().switchError, ERROR_INVALID_HANDLE);
+		EXPECT_EQ(result.error().threadError, ERROR_BUSY);
+		EXPECT_EQ(bindings, std::vector<HDESK>{ Original() });
+	}
+	TEST_F(DesktopLifecycle, MissingWorkerHandleKeepsVisibleApiFailure)
+	{
+		visibleError = ERROR_ACCESS_DENIED;
+		const auto result = Internal::RestoreDesktop(CallerDesktop(), nullptr, Api());
+		ASSERT_FALSE(result);
+		EXPECT_EQ(result.error().switchError, ERROR_ACCESS_DENIED);
+		EXPECT_EQ(result.error().threadError, ERROR_INVALID_HANDLE);
+		EXPECT_EQ(switches, std::vector<HDESK>{ CallerDesktop() });
+	}
 	TEST_F(DesktopLifecycle, NullRestoreTargetMakesNoCalls)
 	{
 		auto result = Internal::RestoreDesktop(nullptr, Api());

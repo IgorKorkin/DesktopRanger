@@ -129,6 +129,9 @@ namespace PaintScreenBorder
 	std::expected<std::vector<HWND>, DWORD>
 	CreateScreenBorderWindows(COLORREF borderColor)
 	{
+		if ((borderColor & 0x00FFFFFF) == transparentColor) {
+			return std::unexpected(ERROR_INVALID_PARAMETER);
+		}
 		BorderContext context{ .color = borderColor };
 		if (!::EnumDisplayMonitors(nullptr, nullptr, CreateMonitorBorder,
 								   reinterpret_cast<LPARAM>(&context))) {
