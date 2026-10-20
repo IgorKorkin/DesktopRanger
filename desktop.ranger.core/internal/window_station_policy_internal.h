@@ -13,10 +13,10 @@ namespace DesktopRanger::WindowStationPolicy::detail
 	};
 
 	[[nodiscard]] std::expected<UniqueSecurityDescriptor, DWORD>
-	SnapshotDacl(::HWINSTA station, const DaclApi &api) noexcept;
+	SnapshotDacl(::HANDLE station, const DaclApi &api) noexcept;
 	[[nodiscard]] std::expected<void, DWORD>
-	ApplyDacl(::HWINSTA station, const ::ACL *dacl, const DaclApi &api) noexcept;
-	[[nodiscard]] std::expected<void, DWORD> RestoreDacl(::HWINSTA station,
+	ApplyDacl(::HANDLE station, const ::ACL *dacl, const DaclApi &api) noexcept;
+	[[nodiscard]] std::expected<void, DWORD> RestoreDacl(::HANDLE station,
 														 ::PSECURITY_DESCRIPTOR snapshot,
 														 const DaclApi &api) noexcept;
 	[[nodiscard]] std::expected<UniqueSecurityDescriptor, DWORD>
