@@ -5,6 +5,7 @@
 #include <Sddl.h>
 #include <cstring>
 #include <map>
+#include <new>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -547,6 +548,66 @@ namespace DesktopRanger::Tests
 		createError.reset();
 		closed.clear();
 		EXPECT_TRUE(Run());
+	}
+	TEST_F(SecureApplicationLauncher, UserSidAllocationExceptionKeepsStageAndClosesToken)
+	{
+		auto api = Api();
+		api.getTokenInformation = [](HANDLE, TOKEN_INFORMATION_CLASS, LPVOID, DWORD,
+									 PDWORD) -> BOOL { throw std::bad_alloc(); };
+		auto result = Internal::LaunchApplication(
+			Desktop(), L"Secure", L"example.exe --argument",
+			[](const PROCESS_INFORMATION &) -> std::expected<void, DWORD> { return {}; },
+			api);
+		ExpectFailure(result, Launcher::LaunchStep::UserSid, ERROR_NOT_ENOUGH_MEMORY);
+		EXPECT_EQ(closed, (std::vector<HANDLE>{ Token() }));
+		EXPECT_EQ(creates, 0);
+	}
+	TEST_F(SecureApplicationLauncher, UserSidUnexpectedExceptionKeepsStage)
+	{
+		auto api = Api();
+		api.getTokenInformation = [](HANDLE, TOKEN_INFORMATION_CLASS, LPVOID, DWORD,
+									 PDWORD) -> BOOL {
+			throw std::runtime_error("SID lookup");
+		};
+		auto result = Internal::LaunchApplication(
+			Desktop(), L"Secure", L"example.exe --argument",
+			[](const PROCESS_INFORMATION &) -> std::expected<void, DWORD> { return {}; },
+			api);
+		ExpectFailure(result, Launcher::LaunchStep::UserSid, ERROR_UNHANDLED_EXCEPTION);
+		EXPECT_EQ(closed, (std::vector<HANDLE>{ Token() }));
+		// Exception cleanup also releases the launch guard.
+		closed.clear();
+		EXPECT_TRUE(Run());
+	}
+	TEST_F(SecureApplicationLauncher, DesktopPolicySelectionAllocationExceptionKeepsStage)
+	{
+		auto api = Api();
+		// Fail during policy preparation/selection, before any ACL is changed.
+		api.getThreadDesktop = [](DWORD) -> HDESK { throw std::bad_alloc(); };
+		auto result = Internal::LaunchApplication(
+			Desktop(), L"Default", L"example.exe --argument",
+			[](const PROCESS_INFORMATION &) -> std::expected<void, DWORD> { return {}; },
+			api);
+		ExpectFailure(result, Launcher::LaunchStep::AllowDesktop,
+					  ERROR_NOT_ENOUGH_MEMORY);
+		EXPECT_EQ(desktopWrites, 0);
+		EXPECT_EQ(stationWrites, 0);
+		EXPECT_EQ(creates, 0);
+	}
+	TEST_F(SecureApplicationLauncher, DesktopPolicySelectionUnexpectedExceptionKeepsStage)
+	{
+		auto api = Api();
+		api.getThreadDesktop = [](DWORD) -> HDESK {
+			throw std::runtime_error("policy selection");
+		};
+		auto result = Internal::LaunchApplication(
+			Desktop(), L"Default", L"example.exe --argument",
+			[](const PROCESS_INFORMATION &) -> std::expected<void, DWORD> { return {}; },
+			api);
+		ExpectFailure(result, Launcher::LaunchStep::AllowDesktop,
+					  ERROR_UNHANDLED_EXCEPTION);
+		EXPECT_EQ(closed, (std::vector<HANDLE>{ Token() }));
+		EXPECT_EQ(creates, 0);
 	}
 	TEST_F(SecureApplicationLauncher, ProcessOnlyEntryPointPreservesNoPolicyBehavior)
 	{

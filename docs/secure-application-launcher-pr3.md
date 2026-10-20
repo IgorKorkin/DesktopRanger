@@ -67,7 +67,7 @@ No new resource class, template hierarchy or virtual API wrapper is needed.
 ## Validation
 
 - Full Release x64 build using scripts/BuildAndTest.ps1 -Configuration Release.
-- 99 GoogleTest cases passed: 69 previous and 30 new launcher cases; zero failed/skipped.
+- 103 GoogleTest cases passed: 69 previous and 34 launcher cases; zero failed/skipped.
 - New files formatted with project .clang-format; existing C++ formatted on changed ranges.
 - clang-format --dry-run --Werror and git diff --check passed.
 - No DesktopRanger executable, real Desktop launch or Window Station ACL test run on host.

@@ -133,6 +133,7 @@ namespace DesktopRanger::SecureApplicationLauncher
 		}
 		auto finishLaunch = wil::scope_exit([&]() noexcept { inProgress.clear(); });
 
+		auto activeStep = LaunchStep::UserSid;
 		// Evaluate the result only after all cleanup guards have updated error.
 		auto operation = [&] {
 			auto sid = GetUserSidString(api);
@@ -140,12 +141,14 @@ namespace DesktopRanger::SecureApplicationLauncher
 				fail(LaunchStep::UserSid, sid.error());
 				return;
 			}
+			activeStep = LaunchStep::AllowDesktop;
 			SecurityDescriptor allow(std::format(L"D:(A;;GA;;;{})", sid.value()));
 			if (!allow.Initialized()) {
 				fail(LaunchStep::AllowDesktop, ::GetLastError());
 				return;
 			}
 			auto createAndWait = [&] {
+				activeStep = LaunchStep::CreateProcess;
 				auto result =
 					detail::CreateApplication(desktopName, commandLine, onStarted, api);
 				if (result)
@@ -159,6 +162,7 @@ namespace DesktopRanger::SecureApplicationLauncher
 				return;
 			}
 
+			activeStep = LaunchStep::OpenStation;
 			HWINSTA station =
 				api.openWindowStation(L"WinSta0", FALSE, READ_CONTROL | WRITE_DAC);
 			if (!station) {
@@ -168,6 +172,7 @@ namespace DesktopRanger::SecureApplicationLauncher
 			auto closeStation =
 				wil::scope_exit([&]() noexcept { api.closeWindowStation(station); });
 			Policy::RestrictedSession session(station, nullptr, api.dacl);
+			activeStep = LaunchStep::RestrictStation;
 			if (auto result = session.Restrict(); !result) {
 				fail(LaunchStep::RestrictStation, result.error());
 				return;
@@ -180,6 +185,7 @@ namespace DesktopRanger::SecureApplicationLauncher
 					(void)session.Restore();
 				}
 			});
+			activeStep = LaunchStep::SnapshotDesktop;
 			auto snapshot = Policy::detail::SnapshotDacl(desktop, api.dacl);
 			if (!snapshot) {
 				fail(LaunchStep::SnapshotDesktop, snapshot.error());
@@ -193,6 +199,7 @@ namespace DesktopRanger::SecureApplicationLauncher
 					(void)Policy::detail::RestoreDacl(desktop, snapshot->get(), api.dacl);
 				}
 			});
+			activeStep = LaunchStep::AllowDesktop;
 			auto dacl = Policy::GetDacl(allow.GetDescriptor());
 			if (!dacl) {
 				fail(LaunchStep::AllowDesktop, dacl.error());
@@ -208,9 +215,9 @@ namespace DesktopRanger::SecureApplicationLauncher
 		try {
 			operation();
 		} catch (const std::bad_alloc &) {
-			fail(LaunchStep::Validate, ERROR_NOT_ENOUGH_MEMORY);
+			fail(activeStep, ERROR_NOT_ENOUGH_MEMORY);
 		} catch (...) {
-			fail(LaunchStep::Validate, ERROR_UNHANDLED_EXCEPTION);
+			fail(activeStep, ERROR_UNHANDLED_EXCEPTION);
 		}
 		if (error.failure || error.desktopRestoreError || error.stationRestoreError) {
 			return std::unexpected(error);

@@ -37,7 +37,9 @@ namespace DesktopRanger::SecureApplicationLauncher
 			&onStarted);
 	// Install the application's window hook before calling. onStarted borrows both
 	// process handles until it returns; both are closed before this function returns.
-	// Temporary permissions remain in effect throughout onStarted. Desktop is borrowed.
+	// Temporary permissions remain in effect throughout onStarted, except when
+	// desktopName is "Default" and desktop is the calling thread's Desktop:
+	// then neither Window Station nor Desktop ACLs are changed. Desktop is borrowed.
 	// Errors after CreateProcess retain its PID; no process is terminated on failure.
 	[[nodiscard]] std::expected<DWORD, LaunchError> LaunchApplication(
 		HDESK desktop, std::wstring_view desktopName, std::wstring_view commandLine,
