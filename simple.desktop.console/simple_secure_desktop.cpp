@@ -1,14 +1,20 @@
 #include <cstddef>
+#include <cstdio>
 #include <format>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 #include <Aclapi.h>
 #include <Sddl.h>
 #include <tchar.h>
+#include <wil/resource.h>
 
+#include "../desktop.ranger.core/desktop_lifecycle.h"
+#include "../desktop.ranger.gui/paint_screen_border.h"
+#include "internal/simple_desktop_internal.h"
 #include "simple_secure_desktop.h"
 
 namespace
@@ -57,7 +63,9 @@ namespace BasicDesktop
 
 namespace SimpleSecureDesktop
 {
-	void LaunchAppOnDesktop(IN const wchar_t *DesktopName, IN wchar_t *CommandLine)
+	std::expected<void, DWORD> detail::LaunchAppOnDesktop(const wchar_t *DesktopName,
+														  wchar_t *CommandLine,
+														  const SimpleApi &api)
 	{
 		STARTUPINFOW si{};
 		si.cb = sizeof(si);
@@ -66,13 +74,27 @@ namespace SimpleSecureDesktop
 		si.wShowWindow = SW_SHOW;
 		PROCESS_INFORMATION pi{};
 
-		const auto launched = ::CreateProcessW(nullptr, CommandLine, nullptr, nullptr, 0,
-											   0, nullptr, nullptr, &si, &pi);
-		if (launched) {
-			::WaitForInputIdle(pi.hProcess, 200);
-			::CloseHandle(pi.hThread);
-			::CloseHandle(pi.hProcess);
+		if (!api.createProcess(nullptr, CommandLine, nullptr, nullptr, 0, 0, nullptr,
+							   nullptr, &si, &pi)) {
+			const auto error = ::GetLastError();
+			return std::unexpected(error ? error : ERROR_GEN_FAILURE);
 		}
+		auto closeProcess = wil::scope_exit([&]() noexcept {
+			if (pi.hThread) {
+				api.closeHandle(pi.hThread);
+			}
+			if (pi.hProcess) {
+				api.closeHandle(pi.hProcess);
+			}
+		});
+		api.waitForInputIdle(pi.hProcess, 200);
+		return {};
+	}
+
+	std::expected<void, DWORD> LaunchAppOnDesktop(const wchar_t *DesktopName,
+												  wchar_t *CommandLine)
+	{
+		return detail::LaunchAppOnDesktop(DesktopName, CommandLine, {});
 	}
 
 	bool CreateNewDesktop(IN const wchar_t *DesktopName, OUT HDESK &DefaultDesktopHandle,
@@ -159,87 +181,132 @@ namespace SimpleSecureDesktop
 		return SecretDesktopHandle != nullptr;
 	}
 
+	namespace
+	{
+		void ReportRestoreFailure(
+			const DesktopRanger::DesktopLifecycle::RestoreError &first,
+			const std::expected<void, DesktopRanger::DesktopLifecycle::RestoreError>
+				&retry,
+			RunError &errors, const detail::SimpleApi &api) noexcept
+		{
+			std::fprintf(stderr,
+						 "Simple Desktop: restore failed (visible=%lu, thread=%lu); "
+						 "retry %s (visible=%lu, thread=%lu).\n",
+						 first.switchError.value_or(0), first.threadError.value_or(0),
+						 retry ? "succeeded" : "failed",
+						 retry ? 0UL : retry.error().switchError.value_or(0),
+						 retry ? 0UL : retry.error().threadError.value_or(0));
+			std::fflush(stderr);
+			::OutputDebugStringW(
+				L"Simple Desktop: Desktop restoration failed; see stderr.\n");
+			if (retry) {
+				return;
+			}
+
+			// The original Desktop may still be invisible. Notify the active Desktop
+			// while target is still owned, rather than blocking on a hidden main-thread
+			// UI.
+			if (!api.messageBox(
+					nullptr,
+					L"Desktop restoration failed after a retry. The original Desktop "
+					L"may still be hidden. See the console log. Use the Windows security "
+					L"screen (Ctrl+Alt+Delete) to recover the session.",
+					L"Simple Desktop restoration error",
+					MB_OK | MB_ICONERROR | MB_TOPMOST | MB_SERVICE_NOTIFICATION)) {
+				const auto error = ::GetLastError();
+				errors.notificationError = error ? error : ERROR_GEN_FAILURE;
+				std::fprintf(stderr, "Simple Desktop: error notification failed (%lu).\n",
+							 *errors.notificationError);
+				std::fflush(stderr);
+				::OutputDebugStringW(L"Simple Desktop: error notification failed.\n");
+			}
+		}
+	} // namespace
+
+	void detail::RunDesktopWorker(HDESK target, HDESK visibleOriginal, RunError &errors,
+								  const SimpleApi &api) noexcept
+	{
+		const auto original = api.getCurrentDesktop();
+		if (!original) {
+			errors.operationError = original.error();
+			return;
+		}
+		HDESK workerOriginal = original.value();
+		auto restoreDesktop = wil::scope_exit([&]() noexcept {
+			const auto restored = api.restoreDesktop(visibleOriginal, workerOriginal);
+			if (!restored) {
+				// Keep the first restore errors separate from the operation error.
+				errors.visibleRestoreError = restored.error().switchError;
+				errors.threadRestoreError = restored.error().threadError;
+				const auto retry = api.restoreDesktop(visibleOriginal, workerOriginal);
+				ReportRestoreFailure(restored.error(), retry, errors, api);
+			}
+		});
+
+		const auto switched = api.switchToDesktop(target);
+		if (!switched) {
+			errors.operationError = switched.error().error;
+			errors.rollbackError = switched.error().rollbackError;
+			return;
+		}
+		workerOriginal = switched.value();
+
+		const auto borders = api.createBorders(RGB(255, 255, 0));
+		if (!borders) {
+			errors.operationError = borders.error();
+			return;
+		}
+		auto destroyBorders = wil::scope_exit([&]() noexcept {
+			const auto destroyed = api.destroyBorders(*borders);
+			if (!destroyed) {
+				errors.windowCleanupError = destroyed.error();
+			}
+		});
+		if (!api.messageBox(
+				nullptr, L"You are on the Simple Desktop. Click OK to switch back.",
+				L"SimpleSecretDesktop",
+				MB_OK | MB_ICONINFORMATION | MB_TOPMOST | MB_SERVICE_NOTIFICATION)) {
+			const auto error = ::GetLastError();
+			errors.operationError = error ? error : ERROR_GEN_FAILURE;
+		}
+	}
+
+	std::expected<void, RunError> RunSimpleDesktop()
+	try {
+		static constexpr wchar_t desktopName[] = L"SimpleSecretDesktop";
+		HDESK visibleOriginal{};
+		HDESK rawDesktop{};
+		if (!CreateNewDesktop(desktopName, visibleOriginal, rawDesktop)) {
+			const auto error = ::GetLastError();
+			return std::unexpected(
+				RunError{ .operationError = error ? error : ERROR_GEN_FAILURE });
+		}
+		DesktopRanger::DesktopLifecycle::UniqueDesktop desktop{ rawDesktop };
+
+		wchar_t commandLine[] = L"explorer shell:AppsFolder";
+		const auto launched = LaunchAppOnDesktop(desktopName, commandLine);
+		if (!launched) {
+			return std::unexpected(RunError{ .operationError = launched.error() });
+		}
+
+		RunError errors{};
+		{
+			std::jthread worker([&]() noexcept {
+				detail::RunDesktopWorker(desktop.get(), visibleOriginal, errors, {});
+			});
+			worker.join();
+		}
+
+		if (errors.operationError || errors.rollbackError || errors.windowCleanupError ||
+			errors.visibleRestoreError || errors.threadRestoreError ||
+			errors.notificationError) {
+			return std::unexpected(errors);
+		}
+		return {};
+	} catch (const std::bad_alloc &) {
+		return std::unexpected(RunError{ .operationError = ERROR_NOT_ENOUGH_MEMORY });
+	} catch (...) {
+		return std::unexpected(RunError{ .operationError = ERROR_GEN_FAILURE });
+	}
+
 } // namespace SimpleSecureDesktop
-
-namespace PaintScreenBorder
-{
-	LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
-	{
-		static const int BORDER_WIDTH = 5;
-
-		switch (msg) {
-		case WM_PAINT: {
-
-			PAINTSTRUCT ps{};
-			HDC hdc = BeginPaint(hwnd, &ps);
-
-			RECT rect{};
-			GetClientRect(hwnd, &rect);
-
-			const COLORREF magenta = RGB(255, 0, 255);
-			HBRUSH bg = CreateSolidBrush(magenta);
-			FillRect(hdc, &rect, bg);
-			DeleteObject(bg);
-
-			const int half = BORDER_WIDTH / 2;
-
-			HPEN pen = CreatePen(PS_SOLID, BORDER_WIDTH, RGB(0, 255, 0));
-			HGDIOBJ oldPen = SelectObject(hdc, pen);
-			HGDIOBJ oldBrush = SelectObject(hdc, GetStockObject(HOLLOW_BRUSH));
-
-			Rectangle(hdc, half, half, rect.right - half, rect.bottom - half);
-
-			SelectObject(hdc, oldPen);
-			SelectObject(hdc, oldBrush);
-			DeleteObject(pen);
-
-			EndPaint(hwnd, &ps);
-
-		} break;
-		case WM_DESTROY:
-			::PostQuitMessage(0);
-			break;
-		default:
-			return ::DefWindowProc(hwnd, msg, wParam, lParam);
-		}
-		return 0;
-	}
-
-	HWND CreateScreenBorderWindow()
-	{
-		static const wchar_t className[] = L"ScreenBorderWindow";
-
-		static bool classRegistered = false;
-
-		if (!classRegistered) {
-			WNDCLASSEXW wc = {};
-			wc.cbSize = sizeof(WNDCLASSEXW);
-			wc.lpfnWndProc = WndProc;
-			wc.hInstance = ::GetModuleHandle(nullptr);
-			wc.lpszClassName = className;
-			wc.hbrBackground = (HBRUSH)GetStockObject(NULL_BRUSH);
-
-			::RegisterClassExW(&wc);
-			classRegistered = true;
-		}
-
-		int x = ::GetSystemMetrics(SM_XVIRTUALSCREEN);
-		int y = ::GetSystemMetrics(SM_YVIRTUALSCREEN);
-		int width = ::GetSystemMetrics(SM_CXVIRTUALSCREEN);
-		int height = ::GetSystemMetrics(SM_CYVIRTUALSCREEN);
-
-		HWND hwnd =
-			::CreateWindowExW(WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_NOACTIVATE |
-								  WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT,
-							  className, L"", WS_POPUP, x, y, width, height, nullptr,
-							  nullptr, ::GetModuleHandle(nullptr), nullptr);
-
-		::SetLayeredWindowAttributes(hwnd, RGB(255, 0, 255), 0, LWA_COLORKEY);
-
-		::ShowWindow(hwnd, SW_SHOW);
-
-		::SendMessage(hwnd, WM_PAINT, 0, 0);
-
-		return hwnd;
-	}
-} // namespace PaintScreenBorder

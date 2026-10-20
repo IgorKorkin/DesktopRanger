@@ -21,6 +21,8 @@
     <ClInclude Include="desktop_lifecycle.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="process_elevation.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="internal\process_elevation_internal.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="internal\desktop_lifecycle_internal.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -41,6 +43,7 @@
     <ClCompile Include="desktop_lifecycle.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="process_elevation.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="security_descriptor.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

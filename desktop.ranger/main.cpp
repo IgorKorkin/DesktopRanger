@@ -1,16 +1,19 @@
 #include <optional>
 #include <print>
+#include <string_view>
 #include <thread>
 
 #include <Windows.h>
+#include <wil/resource.h>
 
+#include "../desktop.ranger.gui/paint_screen_border.h"
 #include "../simple.desktop.console/simple_secure_desktop.h"
 #include "advanced_secure_desktop.h"
 #include "control_window.h"
 #include "desktop_lifecycle.h"
+#include "process_elevation.h"
 #include "secure_app_launcher.h"
 #include "status_logger.h"
-#include "winstation_patcher.h"
 
 void MessageInformation(LPCSTR lpText)
 {
@@ -18,90 +21,14 @@ void MessageInformation(LPCSTR lpText)
 				  MB_OK | MB_ICONINFORMATION | MB_TOPMOST | MB_SERVICE_NOTIFICATION);
 }
 
-namespace LaunchSimpleDesktop
-{
-	static constexpr wchar_t SecretDesktopName[] = L"SimpleSecretDesktop-null";
-
-	HDESK DefaultDesktopHandle{};
-	HDESK SecretDesktopHandle{};
-	HWND border{};
-
-	DWORD WINAPI SimpleDesktopThread(LPVOID param)
-	{
-		UNREFERENCED_PARAMETER(param);
-
-		auto result = BasicDesktop::SwitchToDesktop(SecretDesktopHandle);
-		if (result == false) {
-			MessageInformation("Failed SwitchToDesktop(SecretDesktopHandle)");
-			BasicDesktop::SwitchToDesktop(DefaultDesktopHandle);
-			return 0;
-		}
-
-		border = PaintScreenBorder::CreateScreenBorderWindow();
-
-		MessageInformation("You are on the SecretDesktop!\r\nClick [OK] to switch back");
-
-		result = ::SwitchDesktop(DefaultDesktopHandle);
-		if (result == false) {
-			MessageInformation("Failed SwitchDesktop(DefaultDesktopHandle)");
-			return 0;
-		}
-
-		return 0;
-	}
-
-	void SimpleDesktop()
-	{
-		auto result = SimpleSecureDesktop::CreateNewDesktop(
-			SecretDesktopName, DefaultDesktopHandle, SecretDesktopHandle);
-
-		if (result == false) {
-			MessageInformation("Failed CreateNewDesktop");
-			return;
-		}
-
-		/*
-		Для обеспечения базовой функциональности изолированного рабочего стола
-		запускаются отдельные системные утилиты (sndvol.exe), что позволяет
-		обеспечить управление системой без инициализации полной оболочки
-		Explorer.
-
-		Избыточное ограничение ACCESS_MASK приводит к невозможности запуска ряда
-		системных утилит, что демонстрирует строгую модель разграничения доступа
-		к Desktop-объекту.
-
-		*/
-		wchar_t commandLineAppsFolder[] = L"explorer shell:AppsFolder";
-		SimpleSecureDesktop::LaunchAppOnDesktop(SecretDesktopName, commandLineAppsFolder);
-
-		// 	char commandLinesndvol[] = "sndvol.exe";
-		// 	SimpleSecretDesktop::LaunchAppOnDesktop(SecretDesktopName,
-		// 											commandLinesndvol);
-		//
-		// 	char commandLineexplorer[] = "explorer.exe";
-		// 	SimpleSecretDesktop::LaunchAppOnDesktop(SecretDesktopName,
-		// 											commandLineexplorer);
-
-		const auto hThread =
-			CreateThread(nullptr, 0, SimpleDesktopThread, SecretDesktopHandle, 0, 0);
-
-		if (hThread) {
-			::WaitForSingleObject(hThread, INFINITE);
-			::CloseHandle(hThread);
-		}
-
-		::CloseWindow(border);
-		::CloseDesktop(SecretDesktopHandle);
-	}
-} // namespace LaunchSimpleDesktop
-
 namespace LaunchAdvancedDesktop
 {
 	namespace Lifecycle = DesktopRanger::DesktopLifecycle;
 
 	struct WorkerContext {
 		HDESK target{};
-		HDESK original{};
+		HDESK visibleOriginal{};
+		HDESK threadOriginal{};
 		std::optional<Lifecycle::SwitchError> switchFailure;
 		Lifecycle::RestoreError restoreFailure{};
 		DWORD workerError{};
@@ -119,20 +46,18 @@ namespace LaunchAdvancedDesktop
 
 	void RunAdvancedDesktop(WorkerContext &context)
 	{
-		const auto switched = Lifecycle::SwitchToDesktop(context.target);
-		if (!switched) {
-			context.switchFailure = switched.error();
-			LogDesktopError(L"Enter secure Desktop", context.switchFailure->error);
-			if (context.switchFailure->rollbackError) {
-				LogDesktopError(L"Rollback worker Desktop binding",
-								*context.switchFailure->rollbackError);
-			}
+		const auto threadOriginal = Lifecycle::GetCurrentDesktop();
+		if (!threadOriginal) {
+			context.switchFailure =
+				Lifecycle::SwitchError{ Lifecycle::SwitchStep::GetOriginal,
+										threadOriginal.error(), std::nullopt };
+			LogDesktopError(L"Capture worker Desktop", threadOriginal.error());
 			return;
 		}
-
-		// The two HWND scopes below end before restoration runs on this worker.
+		context.threadOriginal = threadOriginal.value();
 		auto restoreDesktop = wil::scope_exit([&]() noexcept {
-			const auto restored = Lifecycle::RestoreDesktop(context.original);
+			const auto restored = Lifecycle::RestoreDesktop(context.visibleOriginal,
+															context.threadOriginal);
 			if (!restored) {
 				context.restoreFailure = restored.error();
 				if (context.restoreFailure.switchError) {
@@ -146,20 +71,28 @@ namespace LaunchAdvancedDesktop
 			}
 		});
 
-		const auto border = PaintScreenBorder::CreateScreenBorderWindow();
-		if (!border) {
-			context.workerError = ::GetLastError();
-			if (!context.workerError) {
-				context.workerError = ERROR_GEN_FAILURE;
+		const auto switched = Lifecycle::SwitchToDesktop(context.target);
+		if (!switched) {
+			context.switchFailure = switched.error();
+			LogDesktopError(L"Enter secure Desktop", context.switchFailure->error);
+			if (context.switchFailure->rollbackError) {
+				LogDesktopError(L"Rollback worker Desktop binding",
+								*context.switchFailure->rollbackError);
 			}
 			return;
 		}
-		auto destroyBorder = wil::scope_exit([&]() noexcept {
-			if (!::DestroyWindow(border)) {
-				context.windowCleanupError = ::GetLastError();
-				if (!context.windowCleanupError) {
-					context.windowCleanupError = ERROR_GEN_FAILURE;
-				}
+		context.threadOriginal = switched.value();
+
+		const auto borders = PaintScreenBorder::CreateScreenBorderWindows(RGB(0, 255, 0));
+		if (!borders) {
+			context.workerError = borders.error();
+			return;
+		}
+		auto destroyBorders = wil::scope_exit([&]() noexcept {
+			const auto destroyed =
+				PaintScreenBorder::DestroyScreenBorderWindows(*borders);
+			if (!destroyed) {
+				context.windowCleanupError = destroyed.error();
 				LogDesktopError(L"Destroy screen border on worker",
 								context.windowCleanupError);
 			}
@@ -206,7 +139,9 @@ namespace LaunchAdvancedDesktop
 			LOG_INFO(std::format(L"Secret Desktop has been created! handle {:#x}",
 								 reinterpret_cast<uintptr_t>(desktop.get())));
 
-			WorkerContext context{ desktop.get(), original };
+			WorkerContext context{};
+			context.target = desktop.get();
+			context.visibleOriginal = original;
 			DWORD workerResult = EXIT_FAILURE;
 			// Join is before borrowed application state and owned HDESK are released.
 			// jthread also joins during ordinary exception unwinding.
@@ -229,7 +164,7 @@ namespace LaunchAdvancedDesktop
 
 int CheckPriviledge()
 {
-	const auto elevated = WinstationPatcher::IsProcessElevated();
+	const auto elevated = DesktopRanger::ProcessElevation::IsProcessElevated();
 	if (!elevated) {
 		LOG_ERR(L"IsProcessElevated fail");
 		return EXIT_FAILURE;
@@ -243,37 +178,8 @@ int CheckPriviledge()
 	return EXIT_SUCCESS;
 }
 
-void test_OpenDesktop()
+int main(int argc, char *argv[])
 {
-	static constexpr wchar_t simpleDesktop[] = L"simpleDesktop-null";
-	static constexpr wchar_t advancedDesktop[] = L"advancedDesktop-null";
-	static constexpr wchar_t unknownDesktop[] = L"unknownDesktop-null";
-
-	HDESK DefaultDesktopHandle{};
-	HDESK SecretDesktopHandle{};
-
-	auto result = SimpleSecureDesktop::CreateNewDesktop(
-		simpleDesktop, DefaultDesktopHandle, SecretDesktopHandle);
-
-	result = AdvancedSecureDesktop::CreateNewDesktop(
-		advancedDesktop, DefaultDesktopHandle, SecretDesktopHandle);
-
-	auto hdesk = ::OpenDesktopW(simpleDesktop, 0, 0, DESKTOP_READOBJECTS);
-	auto err = ::GetLastError();
-
-	hdesk = ::OpenDesktopW(unknownDesktop, 0, 0, DESKTOP_READOBJECTS);
-	err = ::GetLastError();
-
-	hdesk = ::OpenDesktopW(advancedDesktop, 0, 0, DESKTOP_READOBJECTS);
-	err = ::GetLastError();
-}
-
-int main()
-{
-#if 0
-	test_OpenDesktop();
-#endif // 0
-
 	if (!StatusLogger::Init("DesktopRanger.log")) {
 		MessageInformation("Fail to create a log file");
 		return EXIT_FAILURE;
@@ -284,18 +190,42 @@ int main()
 	}
 
 	LOG_INFO(L"Running elevated.");
+	if (argc == 2 && std::string_view(argv[1]) == "--simple") {
+		const auto result = SimpleSecureDesktop::RunSimpleDesktop();
+		if (!result) {
+			const auto &error = result.error();
+			if (error.operationError) {
+				LOG_ERR(std::format(L"Simple Desktop operation failed: {}",
+									*error.operationError));
+			}
+			if (error.rollbackError) {
+				LOG_ERR(std::format(L"Simple Desktop rollback failed: {}",
+									*error.rollbackError));
+			}
+			if (error.windowCleanupError) {
+				LOG_ERR(std::format(L"Simple Desktop window cleanup failed: {}",
+									*error.windowCleanupError));
+			}
+			if (error.visibleRestoreError) {
+				LOG_ERR(std::format(L"Simple Desktop visible restore failed: {}",
+									*error.visibleRestoreError));
+			}
+			if (error.threadRestoreError) {
+				LOG_ERR(std::format(L"Simple Desktop worker restore failed: {}",
+									*error.threadRestoreError));
+			}
+			if (error.notificationError) {
+				LOG_ERR(std::format(L"Simple Desktop error notification failed: {}",
+									*error.notificationError));
+			}
+			return EXIT_FAILURE;
+		}
+		return EXIT_SUCCESS;
+	}
+	if (argc != 1) {
+		LOG_ERR(L"Usage: Desktop.Ranger.exe [--simple]");
+		return ERROR_INVALID_PARAMETER;
+	}
 
 	return LaunchAdvancedDesktop::StartAdvancedDesktop();
-
-	// ControlWindow::ShowContolWindow();
-
-	// std::string DesktopName = "Default";
-
-	// char CommandLine[] = "explorer shell:AppsFolder";
-	//  char CommandLine[] = "C:/Program Files/Microsoft
-	//  Office/root/Office16/POWERPNT.EXE";
-
-	// SecureApplicationLauncher::LaunchAppAndWaitNewWindow(DesktopName, CommandLine);
-
-	return EXIT_SUCCESS;
 }

@@ -25,6 +25,10 @@ namespace DesktopRanger::Tests
 		{
 			return reinterpret_cast<HDESK>(2);
 		}
+		static HDESK CallerDesktop()
+		{
+			return reinterpret_cast<HDESK>(3);
+		}
 		HDESK bound{ Original() };
 		DWORD createError{}, visibleError{}, originalBindError{};
 		DWORD bindError{}, readError{};
@@ -343,6 +347,44 @@ namespace DesktopRanger::Tests
 		EXPECT_EQ(bound, Original());
 		EXPECT_EQ(closes, 0);
 	}
+	TEST_F(DesktopLifecycle, RestoresCallerVisibleDesktopAndWorkerBindingSeparately)
+	{
+		bound = Target();
+		ASSERT_TRUE(Internal::RestoreDesktop(CallerDesktop(), Original(), Api()));
+		EXPECT_EQ(switches, std::vector<HDESK>{ CallerDesktop() });
+		EXPECT_EQ(bindings, std::vector<HDESK>{ Original() });
+		EXPECT_EQ(bound, Original());
+		EXPECT_EQ(closes, 0);
+	}
+	TEST_F(DesktopLifecycle, SeparateRestoreHandlesRetainIndependentErrors)
+	{
+		visibleError = ERROR_ACCESS_DENIED;
+		originalBindError = ERROR_BUSY;
+		auto result = Internal::RestoreDesktop(CallerDesktop(), Original(), Api());
+		ASSERT_FALSE(result);
+		EXPECT_EQ(result.error().switchError, ERROR_ACCESS_DENIED);
+		EXPECT_EQ(result.error().threadError, ERROR_BUSY);
+		EXPECT_EQ(switches, std::vector<HDESK>{ CallerDesktop() });
+		EXPECT_EQ(bindings, std::vector<HDESK>{ Original() });
+	}
+	TEST_F(DesktopLifecycle, FailedSwitchRollbackCanBeRetriedWithBorrowedOriginal)
+	{
+		visibleError = ERROR_ACCESS_DENIED;
+		originalBindError = ERROR_BUSY;
+		const auto switched = Internal::SwitchToDesktop(Target(), Api());
+		ASSERT_FALSE(switched);
+		EXPECT_EQ(switched.error().rollbackError, ERROR_BUSY);
+		EXPECT_EQ(closes, 0);
+
+		visibleError = 0;
+		originalBindError = 0;
+		const auto restored =
+			Internal::RestoreDesktop(CallerDesktop(), Original(), Api());
+		ASSERT_TRUE(restored);
+		EXPECT_EQ(switches.back(), CallerDesktop());
+		EXPECT_EQ(bindings.back(), Original());
+		EXPECT_EQ(closes, 0);
+	}
 	TEST_F(DesktopLifecycle, RestoreStillRebindsAfterVisibleFailure)
 	{
 		bound = Target();
@@ -389,6 +431,46 @@ namespace DesktopRanger::Tests
 		auto result = Internal::RestoreDesktop(Original(), Api());
 		ASSERT_FALSE(result);
 		EXPECT_EQ(result.error().threadError, readError);
+	}
+	TEST_F(DesktopLifecycle, MissingVisibleHandleStillRestoresWorkerBinding)
+	{
+		bound = Target();
+		const auto result = Internal::RestoreDesktop(nullptr, Original(), Api());
+		ASSERT_FALSE(result);
+		EXPECT_EQ(result.error().switchError, ERROR_INVALID_HANDLE);
+		EXPECT_FALSE(result.error().threadError);
+		EXPECT_EQ(bound, Original());
+		EXPECT_TRUE(switches.empty());
+		EXPECT_EQ(bindings, std::vector<HDESK>{ Original() });
+		EXPECT_EQ(closes, 0);
+	}
+	TEST_F(DesktopLifecycle, MissingWorkerHandleStillRestoresVisibleDesktop)
+	{
+		const auto result = Internal::RestoreDesktop(CallerDesktop(), nullptr, Api());
+		ASSERT_FALSE(result);
+		EXPECT_FALSE(result.error().switchError);
+		EXPECT_EQ(result.error().threadError, ERROR_INVALID_HANDLE);
+		EXPECT_EQ(switches, std::vector<HDESK>{ CallerDesktop() });
+		EXPECT_TRUE(bindings.empty());
+		EXPECT_EQ(closes, 0);
+	}
+	TEST_F(DesktopLifecycle, MissingVisibleHandleKeepsWorkerApiFailure)
+	{
+		originalBindError = ERROR_BUSY;
+		const auto result = Internal::RestoreDesktop(nullptr, Original(), Api());
+		ASSERT_FALSE(result);
+		EXPECT_EQ(result.error().switchError, ERROR_INVALID_HANDLE);
+		EXPECT_EQ(result.error().threadError, ERROR_BUSY);
+		EXPECT_EQ(bindings, std::vector<HDESK>{ Original() });
+	}
+	TEST_F(DesktopLifecycle, MissingWorkerHandleKeepsVisibleApiFailure)
+	{
+		visibleError = ERROR_ACCESS_DENIED;
+		const auto result = Internal::RestoreDesktop(CallerDesktop(), nullptr, Api());
+		ASSERT_FALSE(result);
+		EXPECT_EQ(result.error().switchError, ERROR_ACCESS_DENIED);
+		EXPECT_EQ(result.error().threadError, ERROR_INVALID_HANDLE);
+		EXPECT_EQ(switches, std::vector<HDESK>{ CallerDesktop() });
 	}
 	TEST_F(DesktopLifecycle, NullRestoreTargetMakesNoCalls)
 	{

@@ -36,4 +36,8 @@ namespace DesktopRanger::DesktopLifecycle
 	// rebinding independently; neither operation is guaranteed to succeed.
 	[[nodiscard]] std::expected<void, RestoreError>
 	RestoreDesktop(HDESK original) noexcept;
+	// Use separate borrowed handles when the caller and worker started on different
+	// Desktops. SwitchDesktop restores visible state; SetThreadDesktop restores binding.
+	[[nodiscard]] std::expected<void, RestoreError>
+	RestoreDesktop(HDESK visibleOriginal, HDESK threadOriginal) noexcept;
 } // namespace DesktopRanger::DesktopLifecycle

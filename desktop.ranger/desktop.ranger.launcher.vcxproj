@@ -94,22 +94,24 @@
     <ClCompile Include="advanced_secure_desktop.cpp" />
     <ClCompile Include="control_window.cpp" />
     <ClCompile Include="secure_app_launcher.cpp" />
-    <ClCompile Include="main.cpp" />
     <ClCompile Include="..\simple.desktop.console\simple_secure_desktop.cpp" />
+    <ClCompile Include="main.cpp" />
     <ClCompile Include="status_logger.cpp" />
-    <ClCompile Include="winstation_patcher.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\desktop.ranger.gui\paint_screen_border.h" />
     <ClInclude Include="..\simple.desktop.console\simple_secure_desktop.h" />
     <ClInclude Include="advanced_secure_desktop.h" />
     <ClInclude Include="control_window.h" />
     <ClInclude Include="secure_app_launcher.h" />
     <ClInclude Include="status_logger.h" />
-    <ClInclude Include="winstation_patcher.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Desktop.Ranger.Core\Desktop.Ranger.Core.vcxproj">
       <Project>{8b80b052-8d00-44b6-af5a-a9785c26142a}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\desktop.ranger.gui\desktop.ranger.gui.vcxproj">
+      <Project>{7F96D9A7-7B82-4FA2-93E5-4D35E5E4AB41}</Project>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
