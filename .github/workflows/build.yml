@@ -106,6 +106,10 @@ jobs:
 
           Write-Host "All unit tests passed."
 
+      - name: Run current-Desktop integration (no switching or ACL changes)
+        shell: pwsh
+        run: .\scripts\RunFunctionalTests.ps1 -Configuration Release
+
       - name: Show output directory
         if: ${{ always() }}
         shell: pwsh
@@ -116,7 +120,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: DesktopRanger-Test-Results
-          path: .output/Release/test-results.xml
+          path: |
+            .output/Release/test-results.xml
+            .output/Release/functional/
           if-no-files-found: warn
 
       - name: Upload build artifacts

@@ -15,6 +15,10 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "check_app_container", "chec
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Desktop.Ranger.GUI", "desktop.ranger.gui\desktop.ranger.gui.vcxproj", "{7F96D9A7-7B82-4FA2-93E5-4D35E5E4AB41}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Desktop.Ranger.Functional", "desktop.ranger.functional\desktop.ranger.functional.vcxproj", "{14AA5511-ED2A-4C61-834F-C25D13B2A7C3}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test_probe", "test.probe\test.probe.vcxproj", "{78F0B712-F01D-4B69-934D-9B744A14AF54}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -23,6 +27,22 @@ Global
 		Release|x64 = Release|x64
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{14AA5511-ED2A-4C61-834F-C25D13B2A7C3}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{14AA5511-ED2A-4C61-834F-C25D13B2A7C3}.Debug|Any CPU.Build.0 = Debug|x64
+		{14AA5511-ED2A-4C61-834F-C25D13B2A7C3}.Debug|x64.ActiveCfg = Debug|x64
+		{14AA5511-ED2A-4C61-834F-C25D13B2A7C3}.Debug|x64.Build.0 = Debug|x64
+		{14AA5511-ED2A-4C61-834F-C25D13B2A7C3}.Release|Any CPU.ActiveCfg = Release|x64
+		{14AA5511-ED2A-4C61-834F-C25D13B2A7C3}.Release|Any CPU.Build.0 = Release|x64
+		{14AA5511-ED2A-4C61-834F-C25D13B2A7C3}.Release|x64.ActiveCfg = Release|x64
+		{14AA5511-ED2A-4C61-834F-C25D13B2A7C3}.Release|x64.Build.0 = Release|x64
+		{78F0B712-F01D-4B69-934D-9B744A14AF54}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{78F0B712-F01D-4B69-934D-9B744A14AF54}.Debug|Any CPU.Build.0 = Debug|x64
+		{78F0B712-F01D-4B69-934D-9B744A14AF54}.Debug|x64.ActiveCfg = Debug|x64
+		{78F0B712-F01D-4B69-934D-9B744A14AF54}.Debug|x64.Build.0 = Debug|x64
+		{78F0B712-F01D-4B69-934D-9B744A14AF54}.Release|Any CPU.ActiveCfg = Release|x64
+		{78F0B712-F01D-4B69-934D-9B744A14AF54}.Release|Any CPU.Build.0 = Release|x64
+		{78F0B712-F01D-4B69-934D-9B744A14AF54}.Release|x64.ActiveCfg = Release|x64
+		{78F0B712-F01D-4B69-934D-9B744A14AF54}.Release|x64.Build.0 = Release|x64
 		{401D5967-31CF-4E85-96EE-80FF9A802EEA}.Debug|Any CPU.ActiveCfg = Debug|x64
 		{401D5967-31CF-4E85-96EE-80FF9A802EEA}.Debug|Any CPU.Build.0 = Debug|x64
 		{401D5967-31CF-4E85-96EE-80FF9A802EEA}.Debug|x64.ActiveCfg = Debug|x64

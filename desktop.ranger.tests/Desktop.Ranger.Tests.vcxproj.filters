@@ -9,6 +9,8 @@
     </ClCompile>
     <ClCompile Include="process_elevation_test.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="simple_desktop_test.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="functional_runner_test.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="..\desktop.ranger.functional\functional_runner.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="..\simple.desktop.console\simple_secure_desktop.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="pch.cpp">
       <Filter>Source Files</Filter>
