@@ -19,7 +19,7 @@ namespace DesktopRanger::Tests
 		Functional::Options options{ L"test_probe.exe", L"simulated", 100, 50, 25 };
 		bool running{}, stopSet{}, stopped{}, failCreate{}, ignoreStop{}, failTerminate{};
 		bool failSet{}, failExitCode{}, acknowledgeStopped{ true }, failAlive{},
-			failEnter{};
+			failEnter{}, failGet{};
 		DWORD readiness{ WAIT_OBJECT_0 + 1 }, lastError{ ERROR_ACCESS_DENIED };
 		DWORD createError{ ERROR_FILE_NOT_FOUND }, probeExit{};
 		int restoreFailures{}, restoreCalls{}, processCloses{}, threadCloses{}, kills{};
@@ -195,6 +195,10 @@ namespace DesktopRanger::Tests
 		}
 		static HDESK WINAPI Get(DWORD)
 		{
+			if (active->failGet) {
+				::SetLastError(active->lastError);
+				return nullptr;
+			}
 			return active->bound;
 		}
 		static BOOL WINAPI Bind(HDESK desktop)
@@ -234,7 +238,7 @@ namespace DesktopRanger::Tests
 			simulated.api.setThreadDesktop = &Bind;
 			simulated.api.switchDesktop = &Switch;
 			return Internal::RunScenario(scenario, options, signals,
-										 Functional::Evidence::Simulation, api,
+										 api,
 										 desktop ? &simulated : nullptr);
 		}
 	};
@@ -424,6 +428,20 @@ namespace DesktopRanger::Tests
 		ASSERT_TRUE(result.restoreError.switchError);
 		EXPECT_EQ(*result.restoreError.switchError, 0);
 	}
+	TEST_F(FunctionalRunner, OriginalDesktopFailureDoesNotSwitchRestoreOrLaunch)
+	{
+		failGet = true;
+		const auto result = Run();
+		EXPECT_FALSE(result.passed);
+		EXPECT_EQ(result.observedError, ERROR_ACCESS_DENIED);
+		EXPECT_EQ(restoreCalls, 0);
+		EXPECT_FALSE(result.restoreError.switchError);
+		EXPECT_FALSE(result.restoreError.threadError);
+		EXPECT_FALSE(result.restoreRetryError.switchError);
+		EXPECT_FALSE(result.restoreRetryError.threadError);
+		EXPECT_EQ(bound, Original());
+		EXPECT_TRUE(events.empty());
+	}
 	TEST_F(FunctionalRunner, EnterFailureStillAttemptsRestorationBeforeReturning)
 	{
 		failEnter = true;
@@ -437,8 +455,28 @@ namespace DesktopRanger::Tests
 	{
 		const auto result = Run(Functional::Scenario::LaunchReady, false);
 		EXPECT_TRUE(result.passed);
+		EXPECT_EQ(result.evidence, Functional::Evidence::Simulation);
+		EXPECT_EQ(Functional::FormatResult(result).find("CURRENT_DESKTOP_INTEGRATION"),
+				  std::string::npos);
 		EXPECT_EQ(restoreCalls, 0);
 		EXPECT_EQ(bound, Original());
+	}
+	TEST_F(FunctionalRunner, UnknownScenariosAreRejectedAndFormattedSafely)
+	{
+		for (const auto scenario : { static_cast<Functional::Scenario>(-1),
+									static_cast<Functional::Scenario>(3) }) {
+			const auto simulated = Run(scenario);
+			EXPECT_FALSE(simulated.passed);
+			EXPECT_EQ(simulated.observedError, ERROR_INVALID_PARAMETER);
+			EXPECT_TRUE(events.empty());
+			EXPECT_EQ(bound, Original());
+			const auto integration = Functional::RunScenario(scenario, options);
+			EXPECT_FALSE(integration.passed);
+			EXPECT_EQ(integration.observedError, ERROR_INVALID_PARAMETER);
+			EXPECT_EQ(integration.evidence, Functional::Evidence::CurrentDesktopIntegration);
+			const auto report = Functional::FormatResult(simulated);
+			EXPECT_NE(report.find("SIMULATION\tunknown\tFAIL"), std::string::npos);
+		}
 	}
 	TEST_F(FunctionalRunner, InvalidTimeoutIsRejectedBeforeLaunching)
 	{

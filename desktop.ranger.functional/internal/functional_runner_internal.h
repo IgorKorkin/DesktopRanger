@@ -36,7 +36,7 @@ namespace DesktopRanger::Functional::detail
 	};
 
 	[[nodiscard]] Result RunScenario(Scenario scenario, const Options &options,
-									 const Signals &signals, Evidence evidence,
+									 const Signals &signals,
 									 const Api &api,
 									 const SimulatedDesktop *desktop = nullptr);
 } // namespace DesktopRanger::Functional::detail

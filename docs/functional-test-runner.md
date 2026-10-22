@@ -57,6 +57,14 @@ No launch, DACL or ownership implementation is duplicated in Core.
 
 ## Evidence and regression tests
 
+The internal API-injection entry point always reports `SIMULATION`, even without a
+`SimulatedDesktop` fixture. Only the public entry point, which uses native APIs and
+validates the current Desktop, reports `CURRENT_DESKTOP_INTEGRATION`. Unknown
+scenarios are rejected before launching or switching and format as `unknown`.
+
+After building the runner and probe, run `scripts/tests/RunFunctionalTests.Tests.ps1`
+to check missing-report diagnostics using a simulated early runner exit.
+
 - `SIMULATION`: GoogleTest invokes the same production runner functions, the real Core
   CreateApplication implementation with substituted process APIs, and the real Core
   DesktopLifecycle implementation with fake HDESKs and substituted WinAPI.

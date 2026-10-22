@@ -186,7 +186,13 @@ namespace DesktopRanger::ApplicationStartup
 {
 	int Initialize(const std::filesystem::path &logFile)
 	{
-		if (!StatusLogger::Init(logFile)) {
+		bool initialized{};
+		try {
+			initialized = StatusLogger::Init(logFile);
+		} catch (const std::filesystem::filesystem_error &) {
+			initialized = false;
+		}
+		if (!initialized) {
 			MessageInformation("Fail to create a log file");
 			return EXIT_FAILURE;
 		}

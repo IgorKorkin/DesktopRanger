@@ -32,7 +32,7 @@ try {
         $exitCode = $process.ExitCode
     }
     finally { $process.Dispose() }
-    if (-not (Test-Path -LiteralPath $report)) { throw 'Runner did not create a report.' }
+    if (-not (Test-Path -LiteralPath $report)) { throw "Runner did not create a report (exit code $exitCode). Logs: $ReportDirectory" }
     $lines = Get-Content -LiteralPath $report
     $lines | Write-Output
     if ($exitCode -ne 0 -or $lines -notcontains 'SUMMARY: passed=3 failed=0') {

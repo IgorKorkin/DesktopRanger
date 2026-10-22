@@ -65,7 +65,7 @@ The solution remains a convenience for building all projects; it is not the isol
 target. CI has independent Stable/Research matrix jobs with fail-fast disabled, a separate
 test job, and independent standalone-example jobs. There are no `needs` dependencies
 between them. A PoC failure can make the overall workflow red, but cannot cancel or prevent
-the Stable build/artifact. Repository branch protection may still require the failed job.
+the Stable build/artifact. If branch protection requires the failed PoC job, it blocks merging.
 CI builds launchers and PoCs but never executes them. Tests run only mocks and safe
 current-Desktop integration. Shared Core/GUI failures can affect both editions by design.
 

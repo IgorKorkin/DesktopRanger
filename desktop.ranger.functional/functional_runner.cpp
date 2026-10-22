@@ -32,6 +32,19 @@ namespace DesktopRanger::Functional
 				   options.shutdownTimeoutMs > 0 && options.shutdownTimeoutMs <= 2000 &&
 				   options.terminateTimeoutMs > 0 && options.terminateTimeoutMs <= 1000;
 		}
+		const char *ScenarioName(Scenario scenario)
+		{
+			switch (scenario) {
+			case Scenario::LaunchReady:
+				return "launch_ready";
+			case Scenario::ShutdownCleanup:
+				return "shutdown_cleanup";
+			case Scenario::ReadinessTimeout:
+				return "readiness_timeout";
+			default:
+				return nullptr;
+			}
+		}
 		Result Initial(Scenario scenario, Evidence evidence)
 		{
 			return { .scenario = scenario,
@@ -101,13 +114,14 @@ namespace DesktopRanger::Functional
 	} // namespace
 
 	Result detail::RunScenario(Scenario scenario, const Options &options,
-							   const Signals &signals, Evidence evidence, const Api &api,
+							   const Signals &signals, const Api &api,
 							   const SimulatedDesktop *desktop)
 	{
-		Result result = Initial(scenario, evidence);
+		Result result = Initial(scenario, Evidence::Simulation);
 		const auto started = api.now();
 		auto operation = [&] {
-			if (!Valid(options) || !signals.ready || !signals.stop || !signals.stopped) {
+			if (!ScenarioName(scenario) || !Valid(options) || !signals.ready ||
+				!signals.stop || !signals.stopped) {
 				result.observedError = ERROR_INVALID_PARAMETER;
 				return;
 			}
@@ -117,7 +131,7 @@ namespace DesktopRanger::Functional
 			}
 			HDESK original{};
 			auto restore = wil::scope_exit([&]() noexcept {
-				if (desktop) {
+				if (desktop && original) {
 					const auto restored = DesktopLifecycle::detail::RestoreDesktop(
 						desktop->visibleOriginal, original, desktop->api);
 					if (!restored) {
@@ -227,6 +241,10 @@ namespace DesktopRanger::Functional
 	Result RunScenario(Scenario scenario, const Options &options)
 	try {
 		Result failure = Initial(scenario, Evidence::CurrentDesktopIntegration);
+		if (!ScenarioName(scenario)) {
+			failure.observedError = ERROR_INVALID_PARAMETER;
+			return failure;
+		}
 		if (!Valid(options) || options.hookTest) {
 			failure.observedError =
 				options.hookTest ? ERROR_NOT_SUPPORTED : ERROR_INVALID_PARAMETER;
@@ -262,8 +280,9 @@ namespace DesktopRanger::Functional
 		}
 		const detail::Signals signals{ ready->get(), stop->get(), stopped->get(),
 									   readyName,	 stopName,	  stoppedName };
-		return detail::RunScenario(scenario, options, signals,
-								   Evidence::CurrentDesktopIntegration, {});
+		auto result = detail::RunScenario(scenario, options, signals, {});
+		result.evidence = Evidence::CurrentDesktopIntegration;
+		return result;
 	} catch (const std::bad_alloc &) {
 		auto result = Initial(scenario, Evidence::CurrentDesktopIntegration);
 		result.observedError = ERROR_NOT_ENOUGH_MEMORY;
@@ -293,7 +312,7 @@ namespace DesktopRanger::Functional
 
 	std::string FormatResult(const Result &result)
 	{
-		const char *names[]{ "launch_ready", "shutdown_cleanup", "readiness_timeout" };
+		const auto name = ScenarioName(result.scenario);
 		auto code = [](const std::optional<DWORD> &error) {
 			return error ? std::to_string(*error) : std::string("none");
 		};
@@ -304,7 +323,7 @@ namespace DesktopRanger::Functional
 			"pid={} ready={} ready_timeout={} stopped={} elapsed_ms={} hook=NOT_RUN",
 			result.evidence == Evidence::Simulation ? "SIMULATION"
 													: "CURRENT_DESKTOP_INTEGRATION",
-			names[static_cast<int>(result.scenario)], result.passed ? "PASS" : "FAIL",
+			name ? name : "unknown", result.passed ? "PASS" : "FAIL",
 			result.expectedError, result.observedError, result.cleanupError,
 			result.terminationError, code(result.switchRollbackError),
 			code(result.restoreError.switchError), code(result.restoreError.threadError),

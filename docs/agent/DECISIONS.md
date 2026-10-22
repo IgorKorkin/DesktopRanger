@@ -22,7 +22,7 @@ Reason: Core is a reusable dependency, not a mandatory home for exploratory code
 
 ## D004 — Independent build graphs and honest evidence
 
-CI uses independent launcher, test and standalone-example jobs with no `needs` dependency between them and matrix fail-fast disabled. A PoC failure may make the workflow red but cannot prevent the Stable build/artifact; branch protection can still require that failed job. Shared Core/GUI failures can affect both editions. Launcher and PoC jobs build without executing them. Local edition builds must run sequentially when sharing Core/GUI intermediates. Supported configurations are Debug/Release x64; ARM64 is future work.
+CI uses independent launcher, test and standalone-example jobs with no `needs` dependency between them and matrix fail-fast disabled. A PoC failure may make the workflow red but cannot prevent the Stable build/artifact. If branch protection marks the failed PoC job as a required check, that failure blocks merging. Shared Core/GUI failures can affect both editions. Launcher and PoC jobs build without executing them. Local edition builds must run sequentially when sharing Core/GUI intermediates. Supported configurations are Debug/Release x64; ARM64 is future work.
 
 Reason: build independence must coexist with explicit shared dependencies. GoogleTest, simulation and current-Desktop integration do not establish real isolation effectiveness. Stable remains a candidate edition pending VM validation of switching, DACL restoration and recovery; its name does not establish production readiness.
 
