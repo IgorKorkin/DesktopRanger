@@ -1,39 +1,43 @@
 # Session handoff
 
-Updated: 2026-10-22. Repository: `C:\Users\igork\public\DesktopRanger`.
+Updated: 2026-10-22. Repository: `DesktopRanger`.
 
-## Baseline at handoff preparation
+## Revision and publication
 
 - Branch: `feature/minimal-functional-test-runner`.
-- HEAD: `6993d140d293541f0b0d2c4769f6e684900fa4fe`.
-- Stable/Research split is present locally and remains uncommitted. See [architecture](../dual-edition-architecture.md) and [decisions](DECISIONS.md).
-- At entry, tracked modifications: `.github/workflows/build.yml`, `DesktopRanger.sln`, `desktop.ranger/desktop.ranger.launcher.vcxproj`, its `.filters`, `desktop.ranger/main.cpp`, `docs/production-startup-pr4.md`.
-- At entry, untracked work: `desktop.ranger.stable/`, `desktop.ranger/advanced_desktop_startup.cpp`, `desktop.ranger/advanced_desktop_startup.h`, `docs/dual-edition-architecture.md`.
-- No staged changes were observed with submodules excluded. Preserve all inherited work.
+- Implementation HEAD at validation, before the documentation-only handoff commit: `b9f676df6a1b3a65a06797889ceb7d66f473ba3e` (`fix: address runner error handling and evidence review findings`). Resolve the current checkout HEAD with `git rev-parse HEAD`; the handoff commit itself follows this implementation revision.
+- PR: [#27](https://github.com/IgorKorkin/DesktopRanger/pull/27), open and unmerged when inspected. Confirmed published PR HEAD: `f5199ef253f0513c4d12c04185f5691645e93a15`. This earlier commit contains the Stable/Research split and initial handoff documents; its parent contains the functional runner.
+- Review corrections are committed locally. Push was attempted but not completed: native Git Credential Manager could not access credentials (Windows access denied); the connected GitHub integration rejected tree creation with HTTP 403, `Resource not accessible by integration`. No remote ref was changed by the agent.
+- Push this branch from an authenticated local shell, then confirm that PR #27 points to the new branch HEAD. Do not mark the fixes published or review complete until verified.
+- The user's latest instruction is to skip GitHub replies and manual thread resolution. Neither was performed. Do not merge.
 
-## Completed during handoff preparation
+## Review disposition
 
-- Inspected status and tracked unstaged/staged diffs before edits; read architecture, build workflow, test script and Stable entry point.
-- Added only `AGENTS.md`, this file and `docs/agent/DECISIONS.md` for session continuity. Existing implementation and build configuration were not edited.
-- No commit, push or PR performed.
+- FIX P2: missing-report diagnostics now include the runner exit code and log directory; a PowerShell regression test simulates early exit code 37.
+- FIX P2: Desktop restoration requires a captured original HDESK. Regression coverage verifies no switching, restoration or probe launch after capture failure and preserves recovery after entry failure.
+- FIX P2: the internal API-injection entry point always reports simulation, including substituted APIs without a SimulatedDesktop fixture. Only the public native entry point assigns current-Desktop integration evidence; callers cannot select evidence through the internal signature.
+- FIX P3: unknown Scenario values are rejected by both entry points and formatted with a safe `unknown` fallback; negative and out-of-range values are tested.
+- FIX P3: shared launcher startup catches `std::filesystem::filesystem_error` from StatusLogger::Init and follows the existing failure-message/EXIT_FAILURE path. Both launcher builds cover compilation; this exception path was not fault-injected at runtime.
+- FIX P3: documentation now states directly that a required failed PoC check blocks merge, and this handoff uses only the repository name instead of a machine-specific account/path.
+- IGNORE P3: retain small vswhere/MSBuild lookup duplication. A composite action or reusable workflow adds infrastructure and would still need a local-script entry point; the independent jobs and local script remain straightforward. Reconsider extraction only if lookup behavior becomes more complex.
 
-## Validation and evidence
+## Fresh validation
 
-- Previous session, as reported by the user: independent Stable and Research Release x64 builds passed with zero errors and warnings; GoogleTest passed 160/160.
-- This session inspected `.output/Release/logs/20261022-180035-265/test-results.xml`: 160 tests, zero failures/errors/disabled. Builds and tests were not rerun for this documentation task. The prior build warning counts were not independently reverified.
-- Plain Git status/diff failed while inspecting `external/googletest` because access to `.git/modules/external/googletest` was denied by the environment. Inspection succeeded with `--ignore-submodules=all`; submodule cleanliness remains unverified. Do not interpret this as a clean repository.
-- README still describes the earlier public prototype layout; use the architecture document for current local edition boundaries.
+- Stable, Research and functional runner/probe built sequentially in Release x64: each build log reports zero warnings and zero errors.
+- GoogleTest: 162/162 passed, zero skipped. Includes 27 FunctionalRunner cases. Targeted FunctionalRunner tests also passed before the full run.
+- Current-Desktop integration: 3/3 passed, no Desktop switching or ACL changes. Real isolation and hook checks were not run.
+- `scripts/tests/RunFunctionalTests.Tests.ps1`: passed missing-report diagnostics regression. It uses a fake process and does not execute the runner.
+- Evidence, relative to the repository: `.output/Release/logs/pr27-review/stable.log`, `research.log`, `functional.log`, `googletest/{build.log,tests.log,test-results.xml}`, and `integration/{functional-results.txt,runner.log,runner-errors.log}`. Logs are local ignored artifacts.
+- `git diff --check` passed. Full `git status --short` succeeded during this review; prior-session submodule access restrictions were not reproduced in that check.
 
-## Pending work
+## Boundaries and remaining work
 
-The context handoff is prepared. No next implementation task has been selected by the user.
+Research-First, independent PoCs, Stable/Research project boundaries, Core DACL algorithms and Desktop lifecycle implementation remain unchanged. See [architecture](../dual-edition-architecture.md), [decisions](DECISIONS.md) and root `AGENTS.md`.
 
-## Publication preparation
+After successful publication, recheck remote HEAD and PR state and update this handoff with the confirmed revision. Review threads remain untouched by instruction; no claim of Cubic approval is made.
 
-The user's latest instruction authorizes only a local commit; the user will publish the results themselves. Do not push or create an MR/PR under this instruction. The commit scope is the local Stable/Research split and these handoff documents on `feature/minimal-functional-test-runner`; the branch also contains the earlier functional-runner commit relative to `main`. No additional implementation edits were made during commit preparation. Tracked diff whitespace checks passed; builds/tests were not rerun. Resolve the current commit SHA and remote state with Git when resuming; the HEAD and uncommitted-state descriptions above record the earlier baseline, not the commit result.
-
-Functional validation remains pending in a disposable Windows VM with a snapshot: Advanced entry/exit in both launchers, Research `--simple`, control-window actions, per-monitor borders, DACL preservation/restoration, visible Desktop and worker-binding recovery including failure paths. Record scenarios and measured outcomes before making isolation or production-readiness claims.
+Functional validation in a disposable Windows VM with a snapshot is still pending: Advanced entry/exit in both launchers, Research `--simple`, control-window actions, per-monitor borders, DACL preservation/restoration and visible Desktop/worker-binding recovery including failure paths. Stable is not a production-ready or security-validated release.
 
 ## Resume procedure
 
-Read root `AGENTS.md`, this file, [DECISIONS.md](DECISIONS.md) and the architecture document. Recheck branch/HEAD, status, remote state and both diffs; inspect untracked changes. Resolve or report submodule inspection restrictions. Preserve the split and handoff documents. Continue with the user's next concrete task; further commit, push or PR actions require permission appropriate to that task.
+Read root `AGENTS.md`, this file, [DECISIONS.md](DECISIONS.md) and the architecture document. Recheck branch, HEAD, status, both diffs and PR state before editing. Preserve local work and distinguish fresh validation from historical results. Publication is pending the authentication/access block above; merge remains unauthorized.
