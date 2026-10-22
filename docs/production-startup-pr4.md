@@ -1,5 +1,7 @@
 # PR №4: production startup and dependencies
 
+See [dual-edition architecture](dual-edition-architecture.md) for the subsequent Stable/Research split.
+
 ## Project boundaries
 
 - `Desktop.Ranger.Core` owns process elevation checks and Desktop lifecycle operations.

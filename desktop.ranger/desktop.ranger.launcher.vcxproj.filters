@@ -15,6 +15,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="advanced_desktop_startup.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -24,7 +25,6 @@
     <ClCompile Include="status_logger.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\desktop.ranger.gui\paint_screen_border.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="secure_app_launcher.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -36,6 +36,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="advanced_desktop_startup.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="advanced_secure_desktop.h">
       <Filter>Header Files</Filter>
     </ClInclude>
