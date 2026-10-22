@@ -83,6 +83,10 @@
     <ClCompile Include="desktop_lifecycle_test.cpp" />
     <ClCompile Include="process_elevation_test.cpp" />
     <ClCompile Include="simple_desktop_test.cpp" />
+    <ClCompile Include="functional_runner_test.cpp" />
+    <ClCompile Include="..\desktop.ranger.functional\functional_runner.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="..\simple.desktop.console\simple_secure_desktop.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>

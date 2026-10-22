@@ -19,10 +19,19 @@ permissions:
   contents: read
 
 jobs:
-  build-and-test:
-    name: Build and test Release x64
+  launchers:
+    name: ${{ matrix.edition }} Release x64 (build only)
     runs-on: windows-2025-vs2026
-
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - edition: Stable-candidate
+            project: desktop.ranger.stable/desktop.ranger.stable.vcxproj
+            executable: DesktopRanger.Stable.exe
+          - edition: Research
+            project: desktop.ranger/desktop.ranger.launcher.vcxproj
+            executable: Desktop.Ranger.exe
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -49,80 +58,119 @@ jobs:
           "MSBUILD_PATH=$msbuild" |
             Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Build solution
+      - name: Build only selected launcher and its dependencies
         shell: pwsh
         run: |
-          & "$env:MSBUILD_PATH" .\DesktopRanger.sln `
-            /m `
-            /p:Configuration=Release `
-            /p:Platform=x64 `
-            /p:TreatWarningsAsErrors=false
-
-      - name: Build standalone Simple Desktop
-        shell: pwsh
-        run: |
-          & "$env:MSBUILD_PATH" .\simple.desktop.console\simple.desktop.console.vcxproj `
-            /m `
+          & "$env:MSBUILD_PATH" "${{ matrix.project }}" `
+            /m /nr:false `
             "/p:SolutionDir=$env:GITHUB_WORKSPACE\" `
-            /p:Configuration=Release `
-            /p:Platform=x64
+            /p:Configuration=Release /p:Platform=x64 /p:PreferredToolArchitecture=x64
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Run unit tests
+      - name: Upload candidate (not a validated production release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: DesktopRanger-${{ matrix.edition }}-x64
+          path: .output/Release/${{ matrix.executable }}
+          if-no-files-found: error
+
+  tests:
+    name: GoogleTest and current-Desktop integration
+    runs-on: windows-2025-vs2026
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Locate MSBuild
         shell: pwsh
         run: |
-          $testExecutable = Join-Path `
-            $env:GITHUB_WORKSPACE `
-            ".output\Release\Desktop.Ranger.Tests.exe"
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 
-          $testResults = Join-Path `
-            $env:GITHUB_WORKSPACE `
-            ".output\Release\test-results.xml"
+          $msbuild = & $vswhere `
+            -latest `
+            -products * `
+            -requires Microsoft.Component.MSBuild `
+            -find "MSBuild\**\Bin\MSBuild.exe" |
+            Select-Object -First 1
 
-          if (-not (Test-Path $testExecutable)) {
-            Write-Host "Test executable was not found."
-            Write-Host "Contents of the output directory:"
-
-            Get-ChildItem `
-              -Path ".output" `
-              -Recurse `
-              -Force `
-              -ErrorAction SilentlyContinue
-
-            throw "Missing test executable: $testExecutable"
+          if (-not $msbuild) {
+            throw "MSBuild was not found."
           }
 
-          Write-Host "Running tests: $testExecutable"
+          Write-Host "MSBuild path: $msbuild"
+          "MSBUILD_PATH=$msbuild" |
+            Out-File -FilePath $env:GITHUB_ENV -Append
 
-          & $testExecutable `
-            "--gtest_output=xml:$testResults"
+      - name: Build and run unit tests without building launchers or PoCs
+        shell: pwsh
+        run: .\scripts\BuildAndTest.ps1 -Configuration Release -TestsOnly
 
-          $testExitCode = $LASTEXITCODE
-
-          if ($testExitCode -ne 0) {
-            Write-Error "Unit tests failed with exit code $testExitCode."
-            exit $testExitCode
-          }
-
-          Write-Host "All unit tests passed."
-
-      - name: Show output directory
-        if: ${{ always() }}
+      - name: Build functional runner and precompiled probe
         shell: pwsh
         run: |
-          Get-ChildItem -Recurse -Force -Path ".output" -ErrorAction SilentlyContinue
+          & "$env:MSBUILD_PATH" .\desktop.ranger.functional\desktop.ranger.functional.vcxproj `
+            /m /nr:false `
+            "/p:SolutionDir=$env:GITHUB_WORKSPACE\" `
+            /p:Configuration=Release /p:Platform=x64 /p:PreferredToolArchitecture=x64
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Run current-Desktop integration (no switching or ACL changes)
+        shell: pwsh
+        run: .\scripts\RunFunctionalTests.ps1 -Configuration Release
+
       - name: Upload test results
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: DesktopRanger-Test-Results
-          path: .output/Release/test-results.xml
+          path: |
+            .output/Release/logs/
+            .output/Release/functional/
           if-no-files-found: warn
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+  research-examples:
+    name: Independent example ${{ matrix.project }}
+    runs-on: windows-2025-vs2026
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - check_app_container/check_app_container.vcxproj
+          - zis_probe/zis_probe.vcxproj
+          - simple.desktop.console/simple.desktop.console.vcxproj
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
-          name: DesktopRanger-Release-x64
-          path: |
-            .output/Release/**
-          if-no-files-found: error
+          submodules: recursive
+
+      - name: Locate MSBuild
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+
+          $msbuild = & $vswhere `
+            -latest `
+            -products * `
+            -requires Microsoft.Component.MSBuild `
+            -find "MSBuild\**\Bin\MSBuild.exe" |
+            Select-Object -First 1
+
+          if (-not $msbuild) {
+            throw "MSBuild was not found."
+          }
+
+          Write-Host "MSBuild path: $msbuild"
+          "MSBUILD_PATH=$msbuild" |
+            Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Build standalone example (never execute it)
+        shell: pwsh
+        run: |
+          & "$env:MSBUILD_PATH" "${{ matrix.project }}" `
+            /m /nr:false `
+            "/p:SolutionDir=$env:GITHUB_WORKSPACE\" `
+            /p:Configuration=Release /p:Platform=x64 /p:PreferredToolArchitecture=x64
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
