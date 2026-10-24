@@ -11,6 +11,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
+    <SolutionDir Condition="'$(SolutionDir)'=='' or '$(SolutionDir)'=='*Undefined*'">$(MSBuildThisFileDirectory)..\</SolutionDir>
     <VCProjectVersion>18.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{e989cd48-24c5-4e2b-9d1e-0b8c526e0378}</ProjectGuid>
@@ -46,7 +47,7 @@
     <Import Project="..\props\ThirdParty.props" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+  <PropertyGroup>
     <OutDir>$(SolutionDir).output\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir).intermediate\$(ProjectName)\$(Configuration)\</IntDir>
   </PropertyGroup>
@@ -86,6 +87,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="file_probe.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
