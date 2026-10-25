@@ -5,7 +5,8 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $probe = (Resolve-Path -LiteralPath $ProbeExe).ProviderPath
-if ([IO.Path]::GetFileName($probe) -ine 'zis_probe.exe') { throw 'ProbeExe must be the existing zis_probe.exe.' }
+if (-not (Test-Path -LiteralPath $probe -PathType Leaf) -or
+    [IO.Path]::GetFileName($probe) -ine 'zis_probe.exe') { throw 'ProbeExe must be the existing zis_probe.exe.' }
 $rootPath = [IO.Path]::GetFullPath($Root)
 if (Test-Path -LiteralPath $rootPath) {
     throw 'Root already exists. Use a fresh fixture for every run; nothing was overwritten.'

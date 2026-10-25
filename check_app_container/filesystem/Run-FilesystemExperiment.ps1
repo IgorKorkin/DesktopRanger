@@ -57,7 +57,7 @@ foreach ($case in $cases) {
             $grant | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $caseDir 'classic-profile.json') -Encoding UTF8
             $verify.ExpectedAppContainerSid = $grant.AppContainerSid
             $verify.RequireLowIntegrity = $true
-            $arguments = @('--classic', '--file-test', $rootPath)
+            $arguments = @('--classic', '--file-test', $rootPath, '--file-test-no-ui')
         } else {
             $mode = if ($Mechanism -eq 'CPIS') { '--experimental' } else { '--psec' }
             $arguments = @($mode, '--file-test', $rootPath, '--file-test-no-ui')

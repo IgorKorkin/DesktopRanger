@@ -171,11 +171,10 @@ Stable, Core, test_probe, research-index и тела существующих GU
 Запускать в обычном интерактивном PowerShell, без elevation, в disposable VM со
 snapshot. Checkout должен содержать текущие локальные изменения, существующие WIL
 headers, Visual Studio с v145 и Windows SDK 10.0.26100.0. Не требуется сборка solution,
-Core, Stable, test_probe или GoogleTest. Если путь checkout в VM отличается, изменить
-только первую строку. Команды не выполняют Git-операций.
+Core, Stable, test_probe или GoogleTest. Откройте PowerShell в корне checkout;
+пути вычисляются из `$repo`. Команды не выполняют Git-операций.
 
 ```powershell
-Set-Location -LiteralPath 'C:\Users\igork\public\DesktopRanger'
 $repo = $PWD.Path
 $ErrorActionPreference = 'Stop'
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
@@ -197,15 +196,27 @@ $run = Join-Path $env:LOCALAPPDATA ('KCon-Filesystem-' + [guid]::NewGuid().ToStr
 New-Item -ItemType Directory -Path $run | Out-Null
 & $launcher --psec-probe 2>&1 | Tee-Object -FilePath (Join-Path $run 'api-probe.log')
 # Inspect the actual export/query results; probe exit 0 alone is not policy proof.
+$experimentResults = @()
 foreach ($mechanism in @('CPIS', 'PSEC')) {
+    $passed = $false
+    $failure = $null
     try {
         & $runner -Mechanism $mechanism -LauncherExe $launcher -ProbeExe $probe `
             -EvidenceRoot (Join-Path $run $mechanism)
+        if (-not $?) { throw "$mechanism runner reported failure." }
+        $passed = $true
     } catch {
-        Write-Warning "$mechanism incomplete: $($_.Exception.Message)"
+        $failure = $_.Exception.Message
+        Write-Warning "$mechanism incomplete: $failure"
     }
+    $experimentResults += [pscustomobject]@{ Mechanism = $mechanism; Passed = $passed; Error = $failure }
 }
+$experimentResults | ConvertTo-Json -Depth 3 |
+    Set-Content -LiteralPath (Join-Path $run 'experiment-wrapper-results.json') -Encoding UTF8
 Write-Host "Raw VM evidence: $run"
+if (@($experimentResults | Where-Object { -not $_.Passed }).Count) {
+    throw 'One or more filesystem experiments failed; inspect experiment-wrapper-results.json and raw evidence.'
+}
 ```
 
 Runner вызывает ровно новые файловые ветки существующего EXE:
@@ -308,8 +319,10 @@ CPIS allow-secrets fixture из предыдущего неуспешного з
 fixture и не запускать многосценарный runner для этих двух проверок:
 
 ```powershell
-& 'C:\Users\igork\public\DesktopRanger\.output\Release\check_app_container.exe' --experimental --file-test $Root --file-test-allow-secrets --file-test-no-ui --no-filesystem-policy
-& 'C:\Users\igork\public\DesktopRanger\.output\Release\check_app_container.exe' --psec --no-filesystem-policy
+$repo = $PWD.Path # Run from the checkout root.
+$launcher = Join-Path $repo '.output\Release\check_app_container.exe'
+& $launcher --experimental --file-test $Root --file-test-allow-secrets --file-test-no-ui --no-filesystem-policy
+& $launcher --psec --no-filesystem-policy
 ```
 
 По сравнению с соответствующими прежними командами добавлен только
@@ -349,3 +362,33 @@ Identity CPIS остаётся `IgorKorkin.ZIS.CPIS.FileTest`: меняем то
   git diff/status проверяются с `--ignore-submodules=all`.
 - Следующий шаг по KCon не изменился: пользователь выполняет два ранее подготовленных
   минимальных контрольных запуска в VM. Эта задача меняет только настройки сборки.
+
+## PR #28: локальные исправления Cubic — 2026-10-25
+
+- Ветка `research/kcon-sandbox-experiments`, HEAD
+  `6f013bc7fb872e49f9df2dfc1fbe17a90bda28d2`; исходное дерево чистое при
+  `--ignore-submodules=all`. По последнему указанию пользователя commit, staging,
+  push и изменение review threads не выполнялись; все исправления оставлены локально.
+- Исправлены пять замечаний: Leaf-проверка ProbeExe; отдельные результаты CPIS/PSEC
+  с общим throw после обоих запусков; Classic `--file-test-no-ui` в launcher/runner;
+  переносимые команды через `$repo`/`$launcher`; переименование filters в
+  `zis_probe.vcxproj.filters` с актуальными main.cpp/file_probe.cpp.
+- Classic без UI сохраняет SECURITY_CAPABILITIES и `WinSta0\DR_ZIS_POC`, исключая
+  MessageBox и захват/переключение input Desktop. Интерактивный путь сохраняется.
+  Тела CPIS/PSEC launchers, PSEC builder, SID/Desktop helpers, FilePolicy.h и оба
+  исходника zis_probe сравнены с HEAD и не изменились.
+- Одна сборка каждого проекта Release x64: 0 warnings, 0 errors. Неинвазивные проверки
+  прошли: шесть комбинаций отказов wrapper (включая exit 37), раннее отклонение
+  directory/missing/wrong-name ProbeExe без создания fixture или изменения ACL,
+  11 CLI-проверок до создания профиля/Desktop, синтаксис PowerShell и filters XML.
+  Обычный probe выполнил четыре операции с проверкой CSV, canary и наличия context;
+  это проверка reporting в унаследованной сессии, не доказательство sandbox isolation.
+- Evidence: `.output/KCon/cubic-review/` (build, script, CLI/probe, compatibility logs).
+  `git diff --check --ignore-submodules=all` прошёл. Полный diff/status блокируется
+  недоступными метаданными external/googletest; подмодуль не изменялся.
+- GUI и sandbox integration: NOT RUN в этой итерации; VM не запускалась.
+  По новым данным пользователя GUI Classic/CPIS/PSEC работали на Windows 11 26H2
+  build 26300.9711, включая старый и текущий PSEC. На build 28000.3231 обе версии
+  PSEC завершались с 0xC0000142. Эти данные уточняют прежние сообщения о VM-сбоях;
+  файловое enforcement ими не подтверждается. `OpenDesktop(Default)=ALLOWED` остаётся
+  наблюдаемым ограничением; успешный GUI не доказывает полной Desktop isolation.

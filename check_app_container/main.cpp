@@ -413,7 +413,7 @@ namespace
 
 	bool LaunchAppContainerOnDesktop(PSID appSid, const std::filesystem::path &imagePath,
 									 PROCESS_INFORMATION &pi,
-									 const std::filesystem::path &fileTestRoot)
+									 const std::filesystem::path &fileTestRoot, bool noUi)
 	{
 		SIZE_T attributeBytes = 0;
 		::InitializeProcThreadAttributeList(nullptr, 1, 0, &attributeBytes);
@@ -463,7 +463,8 @@ namespace
 		const std::wstring currentDirectory = imagePath.parent_path().wstring();
 		if (!fileTestRoot.empty()) {
 			commandLine = QuotePath(imagePath) + L" --file-test " +
-						  QuotePath(fileTestRoot) + L" sandbox classic --messagebox";
+						  QuotePath(fileTestRoot) + L" sandbox classic" +
+						  (noUi ? L"" : L" --messagebox");
 			std::wcout << L"[+] File test command: " << commandLine << L"\n";
 		}
 
@@ -1149,7 +1150,8 @@ int wmain(int argc, wchar_t **argv)
 				<< L"  check_app_container.exe --psec [--file-test ROOT]\n"
 				<< L"Native file controls: --file-test-allow-secrets | "
 				   L"--file-test-deny-overrides-grant\n"
-				<< L"Native file options: --file-test-no-ui, --file-test-spec-only\n"
+				<< L"File option: --file-test-no-ui (Classic, CPIS, PSEC)\n"
+				<< L"Native file option: --file-test-spec-only\n"
 				<< L"Diagnostic control: --no-filesystem-policy (CPIS file / PSEC GUI)\n";
 
 			return 1;
@@ -1166,8 +1168,11 @@ int wmain(int argc, wchar_t **argv)
 					  L"GUI mode.\n";
 		return 1;
 	}
-	if ((fileOptions.allowSecrets || fileOptions.denyOverridesGrant || fileOptions.noUi ||
-		 fileOptions.specOnly) &&
+	if (fileOptions.noUi && fileTestRoot.empty()) {
+		std::wcerr << L"--file-test-no-ui requires --file-test ROOT.\n";
+		return 1;
+	}
+	if ((fileOptions.allowSecrets || fileOptions.denyOverridesGrant || fileOptions.specOnly) &&
 		(fileTestRoot.empty() || !nativeFileMode ||
 		 (fileOptions.allowSecrets && fileOptions.denyOverridesGrant))) {
 		std::wcerr << L"Native file options require --experimental/--psec --file-test "
@@ -1217,19 +1222,21 @@ int wmain(int argc, wchar_t **argv)
 
 	std::wcout << L"[+] AppContainer SID: " << appSidString << L"\n";
 
-	HDESK originalDesktop = OpenInputDesktop(0, FALSE, DESKTOP_SWITCHDESKTOP);
-
-	if (!originalDesktop) {
-		PrintWin32Error(L"OpenInputDesktop");
-		FreeSid(appSid);
-		return 1;
+	HDESK originalDesktop = nullptr;
+	if (!fileOptions.noUi) {
+		originalDesktop = OpenInputDesktop(0, FALSE, DESKTOP_SWITCHDESKTOP);
+		if (!originalDesktop) {
+			PrintWin32Error(L"OpenInputDesktop");
+			FreeSid(appSid);
+			return 1;
+		}
 	}
 
 	HDESK sandboxDesktop =
 		CreateLowIntegrityDesktop(userSidString, appSidString, mode == LaunchMode::Psec);
 
 	if (!sandboxDesktop) {
-		CloseDesktop(originalDesktop);
+		if (originalDesktop) CloseDesktop(originalDesktop);
 		FreeSid(appSid);
 		return 1;
 	}
@@ -1247,7 +1254,7 @@ int wmain(int argc, wchar_t **argv)
 			std::wcerr << L"[!] zis_probe.exe not found.\n";
 
 			CloseDesktop(sandboxDesktop);
-			CloseDesktop(originalDesktop);
+			if (originalDesktop) CloseDesktop(originalDesktop);
 			FreeSid(appSid);
 
 			return 1;
@@ -1259,7 +1266,7 @@ int wmain(int argc, wchar_t **argv)
 
 		if (!CopyProbeIntoAppContainer(appSidString, probePath)) {
 			CloseDesktop(sandboxDesktop);
-			CloseDesktop(originalDesktop);
+			if (originalDesktop) CloseDesktop(originalDesktop);
 			FreeSid(appSid);
 
 			return 1;
@@ -1280,7 +1287,7 @@ int wmain(int argc, wchar_t **argv)
 				   << L"CreateProcessW + "
 					  L"PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES\n\n";
 
-		launched = LaunchAppContainerOnDesktop(appSid, probePath, pi, fileTestRoot);
+		launched = LaunchAppContainerOnDesktop(appSid, probePath, pi, fileTestRoot, fileOptions.noUi);
 		break;
 
 	case LaunchMode::Experimental:
@@ -1307,7 +1314,7 @@ int wmain(int argc, wchar_t **argv)
 		std::wcerr << L"[!] Process launch failed.\n";
 
 		CloseDesktop(sandboxDesktop);
-		CloseDesktop(originalDesktop);
+		if (originalDesktop) CloseDesktop(originalDesktop);
 		FreeSid(appSid);
 
 		return 1;
@@ -1315,10 +1322,11 @@ int wmain(int argc, wchar_t **argv)
 
 	const DWORD timeoutMs = fileTestRoot.empty() ? 30'000 : 300'000;
 	std::wcout << L"[+] Child PID: " << pi.dwProcessId << L"\n"
-			   << L"[+] Switching to the ZIS desktop for up to " << timeoutMs / 1000
+			   << (fileOptions.noUi ? L"[+] Waiting without input Desktop switching for up to " :
+				   L"[+] Switching to the ZIS desktop for up to ") << timeoutMs / 1000
 			   << L" seconds...\n";
 
-	const bool switched = ::SwitchDesktop(sandboxDesktop) != FALSE;
+	const bool switched = fileOptions.noUi || ::SwitchDesktop(sandboxDesktop) != FALSE;
 	if (!switched) {
 		PrintWin32Error(L"SwitchDesktop(ZIS)");
 		if (!fileTestRoot.empty() && !::TerminateProcess(pi.hProcess, 0xDEAD))
@@ -1328,8 +1336,8 @@ int wmain(int argc, wchar_t **argv)
 	const DWORD wait = ::WaitForSingleObject(pi.hProcess, timeoutMs);
 	const DWORD waitError = wait == WAIT_FAILED ? ::GetLastError() : ERROR_SUCCESS;
 
-	// Always return the user to the original input desktop.
-	const bool restored = ::SwitchDesktop(originalDesktop) != FALSE;
+	// Restore the original input desktop only when the interactive path captured it.
+	const bool restored = !originalDesktop || ::SwitchDesktop(originalDesktop) != FALSE;
 	if (!restored)
 		PrintWin32Error(L"SwitchDesktop(original)");
 
@@ -1368,7 +1376,7 @@ int wmain(int argc, wchar_t **argv)
 	::CloseHandle(pi.hThread);
 	::CloseHandle(pi.hProcess);
 	::CloseDesktop(sandboxDesktop);
-	::CloseDesktop(originalDesktop);
+	if (originalDesktop) ::CloseDesktop(originalDesktop);
 	::FreeSid(appSid);
 
 	std::wcout << L"\nDone.\n"
