@@ -366,9 +366,9 @@ Identity CPIS остаётся `IgorKorkin.ZIS.CPIS.FileTest`: меняем то
 ## PR #28: локальные исправления Cubic — 2026-10-25
 
 - Ветка `research/kcon-sandbox-experiments`, HEAD
-  `6f013bc7fb872e49f9df2dfc1fbe17a90bda28d2`; исходное дерево чистое при
-  `--ignore-submodules=all`. По последнему указанию пользователя commit, staging,
-  push и изменение review threads не выполнялись; все исправления оставлены локально.
+  `d00dc768cd70a7b7885d1242cc4c44f702c4f138` (`fix cubic`); исходное дерево чистое при
+  `--ignore-submodules=all`. Исправления находятся в текущем локальном коммите;
+  push и изменение review threads не выполнялись.
 - Исправлены пять замечаний: Leaf-проверка ProbeExe; отдельные результаты CPIS/PSEC
   с общим throw после обоих запусков; Classic `--file-test-no-ui` в launcher/runner;
   переносимые команды через `$repo`/`$launcher`; переименование filters в
