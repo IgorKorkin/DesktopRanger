@@ -2,18 +2,23 @@
 
 #include <windows.h>
 //
+#include <aclapi.h>
 #include <sddl.h>
 #include <userenv.h>
 
 #include <array>
+#include <clocale>
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
 
 #include <wil/resource.h>
 #include <wil/result.h>
+
+#include "filesystem/FilePolicy.h"
 
 #pragma comment(lib, "Userenv.lib")
 #pragma comment(lib, "Advapi32.lib")
@@ -68,12 +73,23 @@ namespace
 	};
 
 	constexpr wchar_t kProfileName[] = L"IgorKorkin.ZIS.PoC";
+	constexpr wchar_t kCpisFileProfile[] = L"IgorKorkin.ZIS.CPIS.FileTest";
 	constexpr wchar_t kDesktopName[] = L"DR_ZIS_POC";
+
+	struct FileTestOptions {
+		bool allowSecrets = false;
+		bool denyOverridesGrant = false;
+		bool noUi = false;
+		bool specOnly = false;
+		bool noFilesystemPolicy = false;
+		std::vector<std::uint8_t> specification;
+	};
 
 	struct PsecLaunchContext {
 		HMODULE processModel = nullptr;
 		HANDLE environment = nullptr;
 		PFN_CloseProcessSecurityEnvironment closeEnvironment = nullptr;
+		std::vector<std::uint8_t> specification;
 	};
 
 	void ClosePsecContext(PsecLaunchContext &ctx)
@@ -89,6 +105,7 @@ namespace
 		}
 
 		ctx.closeEnvironment = nullptr;
+		ctx.specification.clear();
 	}
 
 	std::string WideToUtf8(const std::wstring &value)
@@ -294,8 +311,13 @@ namespace
 		return true;
 	}
 
-	bool LaunchExperimentalSandboxOnDesktop(const std::filesystem::path &imagePath,
-											PROCESS_INFORMATION &pi)
+	std::wstring QuotePath(const std::filesystem::path &path);
+
+	bool
+	LaunchExperimentalSandboxOnDesktop(const std::filesystem::path &imagePath,
+									   PROCESS_INFORMATION &pi,
+									   const std::filesystem::path &fileTestRoot = {},
+									   const FileTestOptions *fileTest = nullptr)
 	{
 		HMODULE processModel =
 			::LoadLibraryExW(L"processmodel.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -315,6 +337,13 @@ namespace
 			PrintWin32Error(L"GetProcAddress(Experimental_CreateProcessInSandbox)");
 			return false;
 		}
+		if (fileTest)
+			std::wcout << L"API available: CPIS export present\n";
+		const auto *specData =
+			fileTest ? fileTest->specification.data() : kMinimalSandboxSpec.data();
+		const auto specSize =
+			fileTest ? fileTest->specification.size() : kMinimalSandboxSpec.size();
+		const auto *identity = fileTest ? kCpisFileProfile : kProfileName;
 
 		std::wstring desktopPath = std::wstring(L"WinSta0\\") + kDesktopName;
 
@@ -325,32 +354,36 @@ namespace
 		std::wcout << L"[+] Experimental_CreateProcessInSandbox\n"
 				   << L"    Image:    " << imagePath.wstring() << L"\n"
 				   << L"    Desktop:  " << desktopPath << L"\n"
-				   << L"    Identity: " << kProfileName << L"\n";
+				   << L"    Identity: " << identity << L"\n";
 
 		std::wstring commandLine = L"\"" + imagePath.wstring() + L"\"";
+		if (fileTest) {
+			commandLine =
+				QuotePath(imagePath) + L" --file-test " + QuotePath(fileTestRoot) +
+				(fileTest->allowSecrets ? L" baseline cpis" : L" sandbox cpis") +
+				(fileTest->noUi ? L"" : L" --messagebox");
+		}
 
 		const std::wstring currentDirectory = imagePath.parent_path().wstring();
 
 		std::wcout << L"    Command:  " << commandLine << L"\n"
 				   << L"    CWD:      " << currentDirectory << L"\n"
-				   << L"    SBOX ptr: " << kMinimalSandboxSpec.data() << L"\n"
-				   << L"    SBOX size:" << kMinimalSandboxSpec.size() << L"\n";
+				   << L"    SBOX ptr: " << static_cast<const void *>(specData) << L"\n"
+				   << L"    SBOX size:" << specSize << L"\n";
 
 		::SetLastError(ERROR_SUCCESS);
 
 		const BOOL ok =
-			createProcessInSandbox(imagePath.c_str(),		   // applicationName
-								   commandLine.data(),		   // commandLine - writable!
-								   nullptr,					   // processAttributes
-								   nullptr,					   // threadAttributes
-								   FALSE,					   // inheritHandles
-								   0,						   // creationFlags
-								   nullptr,					   // environment
-								   currentDirectory.c_str(),   // currentDirectory
-								   &si,						   // startupInfo
-								   kProfileName,			   // identity
-								   kMinimalSandboxSpec.data(), // SBOX
-								   static_cast<DWORD>(kMinimalSandboxSpec.size()), &pi);
+			createProcessInSandbox(imagePath.c_str(),  // applicationName
+								   commandLine.data(), // commandLine - writable!
+								   nullptr,			   // processAttributes
+								   nullptr,			   // threadAttributes
+								   FALSE,			   // inheritHandles
+								   fileTest ? CREATE_SUSPENDED : 0,
+								   nullptr,					 // environment
+								   currentDirectory.c_str(), // currentDirectory
+								   &si,						 // startupInfo
+								   identity, specData, static_cast<DWORD>(specSize), &pi);
 
 		if (!ok) {
 			const DWORD error = ::GetLastError();
@@ -368,8 +401,19 @@ namespace
 		return true;
 	}
 
+	std::wstring QuotePath(const std::filesystem::path &path)
+	{
+		const auto value = path.wstring();
+		std::wstring result = L"\"" + value;
+		// Escape trailing backslashes before the closing command-line quote.
+		for (size_t i = value.size(); i > 0 && value[i - 1] == L'\\'; --i)
+			result += L'\\';
+		return result + L"\"";
+	}
+
 	bool LaunchAppContainerOnDesktop(PSID appSid, const std::filesystem::path &imagePath,
-									 PROCESS_INFORMATION &pi)
+									 PROCESS_INFORMATION &pi,
+									 const std::filesystem::path &fileTestRoot, bool noUi)
 	{
 		SIZE_T attributeBytes = 0;
 		::InitializeProcThreadAttributeList(nullptr, 1, 0, &attributeBytes);
@@ -415,9 +459,20 @@ namespace
 
 		const DWORD flags = EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT;
 
-		const BOOL ok =
-			::CreateProcessW(imagePath.c_str(), nullptr, nullptr, nullptr, FALSE, flags,
-							 nullptr, nullptr, &si.StartupInfo, &pi);
+		std::wstring commandLine;
+		const std::wstring currentDirectory = imagePath.parent_path().wstring();
+		if (!fileTestRoot.empty()) {
+			commandLine = QuotePath(imagePath) + L" --file-test " +
+						  QuotePath(fileTestRoot) + L" sandbox classic" +
+						  (noUi ? L"" : L" --messagebox");
+			std::wcout << L"[+] File test command: " << commandLine << L"\n";
+		}
+
+		const BOOL ok = ::CreateProcessW(
+			imagePath.c_str(), commandLine.empty() ? nullptr : commandLine.data(),
+			nullptr, nullptr, FALSE, flags, nullptr,
+			fileTestRoot.empty() ? nullptr : currentDirectory.c_str(), &si.StartupInfo,
+			&pi);
 
 		if (!ok)
 			PrintWin32Error(L"CreateProcessW(AppContainer + lpDesktop)");
@@ -478,6 +533,10 @@ namespace
 
 		std::wcout << L"processmodel.dll = " << reinterpret_cast<void *>(processModel)
 				   << L"\n\n";
+		std::wcout << L"Experimental_CreateProcessInSandbox = "
+				   << reinterpret_cast<void *>(::GetProcAddress(
+						  processModel, "Experimental_CreateProcessInSandbox"))
+				   << L"\n";
 
 		std::wcout << L"CreateProcessSecurityEnvironment          = "
 				   << reinterpret_cast<void *>(create) << L"\n";
@@ -551,7 +610,8 @@ namespace
 	}
 
 	std::vector<std::uint8_t>
-	BuildMinimalPsecV11(const std::filesystem::path &readOnlyPath)
+	BuildMinimalPsecV11(const std::filesystem::path &readOnlyPath,
+						bool noFilesystemPolicy = false)
 	{
 		const std::string utf8Path = WideToUtf8(readOnlyPath.wstring());
 
@@ -587,12 +647,12 @@ namespace
 		AppendU16(b, 16); // vtable size
 		AppendU16(b, 12); // object size
 
-		AppendU16(b, 4); // version
-		AppendU16(b, 0); // capabilities
-		AppendU16(b, 0); // disallow_win32k
-		AppendU16(b, 0); // ui_restrictions
-		AppendU16(b, 0); // fs_read_write
-		AppendU16(b, 8); // fs_read_only
+		AppendU16(b, 4);						  // version
+		AppendU16(b, 0);						  // capabilities
+		AppendU16(b, 0);						  // disallow_win32k
+		AppendU16(b, 0);						  // ui_restrictions
+		AppendU16(b, 0);						  // fs_read_write
+		AppendU16(b, noFilesystemPolicy ? 0 : 8); // fs_read_only
 
 		//
 		// Root table starts at offset 24.
@@ -613,7 +673,9 @@ namespace
 		// vector starts at offset 36
 		//
 
-		AppendU32(b, 4);
+		AppendU32(b, noFilesystemPolicy ? 0 : 4);
+		if (noFilesystemPolicy)
+			return b; // No filesystem fields or path vector.
 
 		//
 		// vector<string>, one element
@@ -645,7 +707,10 @@ namespace
 	}
 
 	bool LaunchPsecOnDesktop(const std::filesystem::path &imagePath,
-							 PROCESS_INFORMATION &pi, PsecLaunchContext &ctx)
+							 PROCESS_INFORMATION &pi, PsecLaunchContext &ctx,
+							 const std::filesystem::path &fileTestRoot = {},
+							 const FileTestOptions *fileTest = nullptr,
+							 bool noFilesystemPolicy = false)
 	{
 		ctx = {};
 
@@ -671,6 +736,51 @@ namespace
 			ClosePsecContext(ctx);
 			return false;
 		}
+		if (fileTest) {
+			std::wcout << L"API available: PSEC create/close exports present\n";
+			const auto query =
+				reinterpret_cast<PFN_QueryProcessSecurityEnvironmentSupport>(
+					::GetProcAddress(ctx.processModel,
+									 "QueryProcessSecurityEnvironmentSupport"));
+			if (!query) {
+				PrintWin32Error(
+					L"GetProcAddress(QueryProcessSecurityEnvironmentSupport)");
+				ClosePsecContext(ctx);
+				return false;
+			}
+			UINT64 support = 0;
+			const HRESULT queryHr = query(&support);
+			std::wcout << L"QueryProcessSecurityEnvironmentSupport: HRESULT=0x"
+					   << std::hex << static_cast<unsigned long>(queryHr) << L" flags=0x"
+					   << support << std::dec << L"\n";
+			if (FAILED(queryHr) || (!fileTest->allowSecrets && !(support & 0x1))) {
+				std::wcerr << L"Policy not created: native fs_deny support not "
+							  L"confirmed. No fallback.\n";
+				ClosePsecContext(ctx);
+				return false;
+			}
+			const auto version =
+				reinterpret_cast<PFN_IsProcessSecurityEnvironmentVersionSupported>(
+					::GetProcAddress(ctx.processModel,
+									 "IsProcessSecurityEnvironmentVersionSupported"));
+			if (version) {
+				BOOLEAN available = FALSE;
+				DWORD minor = 0;
+				const HRESULT versionHr = version(1, &available, &minor);
+				std::wcout << L"PSEC version query: HRESULT=0x" << std::hex
+						   << static_cast<unsigned long>(versionHr) << std::dec
+						   << L" available=" << static_cast<unsigned>(available)
+						   << L" maxMinor=" << minor << L"\n";
+				if (FAILED(versionHr) || !available || minor < 1) {
+					std::wcerr << L"Policy not created: PSEC 1.1 not "
+								  L"supported/confirmed. No fallback.\n";
+					ClosePsecContext(ctx);
+					return false;
+				}
+			} else {
+				std::wcout << L"Version query absent; Create must validate PSEC 1.1.\n";
+			}
+		}
 
 		//
 		// Give native PSEC read-only access to the directory
@@ -679,11 +789,16 @@ namespace
 
 		const auto readOnlyPath = imagePath.parent_path();
 
-		const auto psec = BuildMinimalPsecV11(readOnlyPath);
+		ctx.specification = fileTest
+								? fileTest->specification
+								: BuildMinimalPsecV11(readOnlyPath, noFilesystemPolicy);
+		const auto &psec = ctx.specification;
 
 		std::wcout << L"[+] Building PSEC 1.1\n"
 				   << L"    Read-only path: " << readOnlyPath.wstring() << L"\n"
 				   << L"    PSEC size:      " << psec.size() << L"\n";
+		if (noFilesystemPolicy)
+			std::wcout << L"    Filesystem fields: absent (diagnostic control)\n";
 
 		HRESULT hr = createEnvironment(psec.data(), static_cast<DWORD>(psec.size()),
 									   0, // PROCESS_SECURITY_ENVIRONMENT_FLAG_NONE
@@ -758,6 +873,12 @@ namespace
 		si.lpAttributeList = attributeList;
 
 		std::wstring commandLine = L"\"" + imagePath.wstring() + L"\"";
+		if (fileTest) {
+			commandLine =
+				QuotePath(imagePath) + L" --file-test " + QuotePath(fileTestRoot) +
+				(fileTest->allowSecrets ? L" baseline psec" : L" sandbox psec") +
+				(fileTest->noUi ? L"" : L" --messagebox");
+		}
 
 		std::wstring currentDirectory = imagePath.parent_path().wstring();
 
@@ -766,7 +887,8 @@ namespace
 				   << L"    Desktop: " << desktopPath << L"\n"
 				   << L"    Command: " << commandLine << L"\n";
 
-		const DWORD flags = EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT;
+		const DWORD flags = EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT |
+							(fileTest ? CREATE_SUSPENDED : 0);
 
 		const BOOL ok = ::CreateProcessW(imagePath.c_str(), commandLine.data(), nullptr,
 										 nullptr, FALSE, flags, nullptr,
@@ -791,12 +913,201 @@ namespace
 		return true;
 	}
 
+	bool SaveFixtureSecurity(const std::filesystem::path &root, const wchar_t *name)
+	{
+		std::ofstream out(root / name, std::ios::binary | std::ios::trunc);
+		constexpr SECURITY_INFORMATION information =
+			DACL_SECURITY_INFORMATION | LABEL_SECURITY_INFORMATION;
+		for (const auto *relative :
+			 { L"", L"bin", L"sources", L"secrets", L"bin/zis_probe.exe",
+			   L"sources/main.cpp", L"secrets/token.txt" }) {
+			const auto path = root / relative;
+			PSECURITY_DESCRIPTOR descriptor = nullptr;
+			const DWORD error =
+				::GetNamedSecurityInfoW(path.c_str(), SE_FILE_OBJECT, information,
+										nullptr, nullptr, nullptr, nullptr, &descriptor);
+			if (error != ERROR_SUCCESS) {
+				PrintWin32Error(L"GetNamedSecurityInfoW(DACL/MIC)", error);
+				return false;
+			}
+			const auto freeDescriptor = wil::scope_exit([&] { ::LocalFree(descriptor); });
+			LPWSTR sddl = nullptr;
+			if (!::ConvertSecurityDescriptorToStringSecurityDescriptorW(
+					descriptor, SDDL_REVISION_1, information, &sddl, nullptr)) {
+				PrintWin32Error(L"ConvertSecurityDescriptorToStringSecurityDescriptorW");
+				return false;
+			}
+			out << WideToUtf8(path.wstring()) << "\n" << WideToUtf8(sddl) << "\n";
+			::LocalFree(sddl);
+		}
+		out.close();
+		return static_cast<bool>(out);
+	}
+
+	int RunNativeFileTest(LaunchMode mode, const std::filesystem::path &root,
+						  const std::filesystem::path &image, FileTestOptions &options)
+	{
+		std::setlocale(LC_CTYPE, ".UTF8");
+		const bool psec = mode == LaunchMode::Psec;
+		const auto pathUtf8 = [&](const wchar_t *name) {
+			return WideToUtf8((root / name).wstring());
+		};
+		options.specification =
+			options.noFilesystemPolicy
+				? std::vector<std::uint8_t>(kMinimalSandboxSpec.begin(),
+											kMinimalSandboxSpec.end())
+				: BuildFilePolicy(psec, pathUtf8(L"bin"), pathUtf8(L"sources"),
+								  pathUtf8(L"secrets"), options.allowSecrets,
+								  options.denyOverridesGrant);
+		const auto specPath = root / (psec ? L"psec-files.bin" : L"cpis-files.bin");
+		std::ofstream spec(specPath, std::ios::binary | std::ios::trunc);
+		spec.write(reinterpret_cast<const char *>(options.specification.data()),
+				   static_cast<std::streamsize>(options.specification.size()));
+		spec.close();
+		if (!spec) {
+			std::wcerr << L"Cannot save the actual API specification: "
+					   << specPath.wstring() << L"\n";
+			return 1;
+		}
+		std::wcout << L"Backend requested: "
+				   << (psec ? L"PSEC 1.1" : L"CPIS / SBOX 0.1.0")
+				   << L"\nBinary specification: " << specPath.wstring() << L"\n";
+		if (options.noFilesystemPolicy) {
+			std::wcout << L"Filesystem fields: absent (diagnostic control); other launch "
+						  L"parameters unchanged.\n";
+		} else {
+			std::wcout << L"bin=read/execute; sources=read/write; secrets="
+					   << (options.allowSecrets ? L"read/write (positive control)"
+						   : options.denyOverridesGrant
+							   ? L"read/write + fs_deny (causal control)"
+							   : L"fs_deny")
+					   << L"\n";
+		}
+		std::wcout
+			<< L"No filesystem ACL grants or fallback are performed by this launcher.\n";
+		if (options.specOnly) {
+			std::wcout << L"Specification only: API, policy acceptance and process NOT "
+						  L"tested.\n";
+			return 0;
+		}
+		// Confirm both canaries outside the sandbox before attempting any policy.
+		for (const auto *relative : { L"sources/main.cpp", L"secrets/token.txt" }) {
+			std::ifstream canary(root / relative, std::ios::binary);
+			if (!canary || canary.peek() == std::ifstream::traits_type::eof()) {
+				std::wcerr << L"Outside-sandbox canary check failed: " << relative
+						   << L"\n";
+				return 1;
+			}
+		}
+		std::wcout << L"Outside-sandbox canaries: present and readable.\n";
+		if (!SaveFixtureSecurity(root, L"security-before.txt"))
+			return 1;
+		std::wstring userSid, appSidString;
+		if (!GetCurrentUserSidString(userSid))
+			return 1;
+		if (!psec) {
+			PSID sid = nullptr;
+			const HRESULT hr =
+				::DeriveAppContainerSidFromAppContainerName(kCpisFileProfile, &sid);
+			if (FAILED(hr)) {
+				PrintHresult(L"Derive CPIS file-test SID", hr);
+				return 1;
+			}
+			const bool ok = SidToString(sid, appSidString);
+			::FreeSid(sid);
+			if (!ok)
+				return 1;
+			std::wcout << L"CPIS identity: " << kCpisFileProfile << L"\nDerived SID: "
+					   << appSidString << L"\n";
+		}
+		HDESK original = nullptr;
+		if (!options.noUi) {
+			original = ::OpenInputDesktop(0, FALSE, DESKTOP_SWITCHDESKTOP);
+			if (!original) {
+				PrintWin32Error(L"OpenInputDesktop");
+				return 1;
+			}
+		}
+		const auto closeOriginal = wil::scope_exit([&] {
+			if (original)
+				::CloseDesktop(original);
+		});
+		HDESK desktop = CreateLowIntegrityDesktop(userSid, appSidString, psec);
+		if (!desktop)
+			return 1;
+		const auto closeDesktop = wil::scope_exit([&] { ::CloseDesktop(desktop); });
+		PsecLaunchContext context{};
+		const auto closeContext = wil::scope_exit([&] { ClosePsecContext(context); });
+		PROCESS_INFORMATION pi{};
+		const bool launched =
+			psec ? LaunchPsecOnDesktop(image, pi, context, root, &options)
+				 : LaunchExperimentalSandboxOnDesktop(image, pi, root, &options);
+		if (!launched) {
+			SaveFixtureSecurity(root, L"security-after.txt");
+			std::wcerr << L"Process launched: no. File policy enforcement: unverified. "
+						  L"No fallback.\n";
+			return 1;
+		}
+		const auto closeProcess = wil::scope_exit([&] {
+			::CloseHandle(pi.hThread);
+			::CloseHandle(pi.hProcess);
+		});
+		std::wcout << L"Process launched: yes; backend=" << (psec ? L"PSEC" : L"CPIS")
+				   << L"; PID=" << pi.dwProcessId
+				   << L". Enforcement requires CSV + controls.\n";
+		// Both native APIs return a suspended child in file-test mode. Observe
+		// host DACL/MIC while the policy is bound, before the probe touches files.
+		const bool captured = SaveFixtureSecurity(root, L"security-bound.txt");
+		const bool resumed =
+			captured && ::ResumeThread(pi.hThread) != static_cast<DWORD>(-1);
+		if (!resumed) {
+			if (captured)
+				PrintWin32Error(L"ResumeThread(file test)");
+			::TerminateProcess(pi.hProcess, ERROR_PROCESS_ABORTED);
+			::WaitForSingleObject(pi.hProcess, INFINITE);
+			return 1;
+		}
+		const bool switched = options.noUi || ::SwitchDesktop(desktop) != FALSE;
+		if (!switched)
+			PrintWin32Error(L"SwitchDesktop(file test)");
+		const DWORD wait = ::WaitForSingleObject(
+			pi.hProcess, switched ? (options.noUi ? 30'000 : 300'000) : 0);
+		if (wait == WAIT_FAILED)
+			PrintWin32Error(L"WaitForSingleObject(file test)");
+		const bool restored = !original || ::SwitchDesktop(original) != FALSE;
+		if (!restored)
+			PrintWin32Error(L"SwitchDesktop(original)");
+		if (wait != WAIT_OBJECT_0) {
+			std::wcerr << L"Probe did not finish in time; terminating before releasing "
+						  L"PSEC objects/buffers.\n";
+			if (!::TerminateProcess(pi.hProcess, ERROR_TIMEOUT))
+				PrintWin32Error(L"TerminateProcess(file test)");
+			// Never release policy state while a live child may still depend on it.
+			if (::WaitForSingleObject(pi.hProcess, INFINITE) != WAIT_OBJECT_0) {
+				PrintWin32Error(L"WaitForSingleObject(terminated file test)");
+				::ExitProcess(1);
+			}
+			return 1;
+		}
+		DWORD exitCode = 0;
+		if (!::GetExitCodeProcess(pi.hProcess, &exitCode)) {
+			PrintWin32Error(L"GetExitCodeProcess");
+			return 1;
+		}
+		std::wcout << L"Probe exit code: " << exitCode << L" / 0x" << std::hex << exitCode
+				   << std::dec << L"\n";
+		const bool saved = SaveFixtureSecurity(root, L"security-after.txt");
+		return switched && restored && saved ? static_cast<int>(exitCode) : 1;
+	}
+
 } // namespace
 
 int wmain(int argc, wchar_t **argv)
 {
 	LaunchMode mode = LaunchMode::Classic;
 	PsecLaunchContext psecContext{};
+	std::filesystem::path fileTestRoot;
+	FileTestOptions fileOptions;
 
 	for (int i = 1; i < argc; ++i) {
 		if (::wcscmp(argv[i], L"--classic") == 0) {
@@ -807,19 +1118,85 @@ int wmain(int argc, wchar_t **argv)
 			mode = LaunchMode::PsecProbe;
 		} else if (::wcscmp(argv[i], L"--psec") == 0) {
 			mode = LaunchMode::Psec;
+		} else if (::wcscmp(argv[i], L"--file-test-allow-secrets") == 0) {
+			fileOptions.allowSecrets = true;
+		} else if (::wcscmp(argv[i], L"--file-test-deny-overrides-grant") == 0) {
+			fileOptions.denyOverridesGrant = true;
+		} else if (::wcscmp(argv[i], L"--file-test-no-ui") == 0) {
+			fileOptions.noUi = true;
+		} else if (::wcscmp(argv[i], L"--file-test-spec-only") == 0) {
+			fileOptions.specOnly = true;
+		} else if (::wcscmp(argv[i], L"--no-filesystem-policy") == 0) {
+			fileOptions.noFilesystemPolicy = true;
+		} else if (::wcscmp(argv[i], L"--file-test") == 0) {
+			if (!fileTestRoot.empty() || i + 1 == argc || !argv[i + 1][0] ||
+				::wcsncmp(argv[i + 1], L"--", 2) == 0) {
+				std::wcerr << L"[!] --file-test requires one fixture ROOT.\n";
+				return 1;
+			}
+			fileTestRoot = argv[++i];
 		} else if (::wcscmp(argv[i], L"--cleanup") == 0) {
 			return Cleanup();
 		} else {
-			std::wcerr << L"Unknown option: " << argv[i] << L"\n\n"
-					   << L"Usage:\n"
-					   << L"  check_app_container.exe --classic\n"
-					   << L"  check_app_container.exe --experimental\n"
-					   << L"  check_app_container.exe --cleanup\n"
-					   << L"  check_app_container.exe --psec-probe\n"
-					   << L"  check_app_container.exe --psec\n";
+			std::wcerr
+				<< L"Unknown option: " << argv[i] << L"\n\n"
+				<< L"Usage:\n"
+				<< L"  check_app_container.exe --classic\n"
+				<< L"  check_app_container.exe --classic --file-test ROOT\n"
+				<< L"  check_app_container.exe --experimental\n"
+				<< L"  check_app_container.exe --experimental --file-test ROOT\n"
+				<< L"  check_app_container.exe --cleanup\n"
+				<< L"  check_app_container.exe --psec-probe\n"
+				<< L"  check_app_container.exe --psec [--file-test ROOT]\n"
+				<< L"Native file controls: --file-test-allow-secrets | "
+				   L"--file-test-deny-overrides-grant\n"
+				<< L"File option: --file-test-no-ui (Classic, CPIS, PSEC)\n"
+				<< L"Native file option: --file-test-spec-only\n"
+				<< L"Diagnostic control: --no-filesystem-policy (CPIS file / PSEC GUI)\n";
 
 			return 1;
 		}
+	}
+
+	std::filesystem::path probePath;
+	const bool nativeFileMode =
+		mode == LaunchMode::Experimental || mode == LaunchMode::Psec;
+	if (fileOptions.noFilesystemPolicy &&
+		!((mode == LaunchMode::Experimental && !fileTestRoot.empty()) ||
+		  (mode == LaunchMode::Psec && fileTestRoot.empty()))) {
+		std::wcerr << L"--no-filesystem-policy requires CPIS --file-test ROOT or PSEC "
+					  L"GUI mode.\n";
+		return 1;
+	}
+	if (fileOptions.noUi && fileTestRoot.empty()) {
+		std::wcerr << L"--file-test-no-ui requires --file-test ROOT.\n";
+		return 1;
+	}
+	if ((fileOptions.allowSecrets || fileOptions.denyOverridesGrant || fileOptions.specOnly) &&
+		(fileTestRoot.empty() || !nativeFileMode ||
+		 (fileOptions.allowSecrets && fileOptions.denyOverridesGrant))) {
+		std::wcerr << L"Native file options require --experimental/--psec --file-test "
+					  L"ROOT; controls are mutually exclusive.\n";
+		return 1;
+	}
+	if (!fileTestRoot.empty()) {
+		if (mode == LaunchMode::PsecProbe) {
+			std::wcerr << L"[!] --psec-probe cannot be combined with --file-test.\n";
+			return 1;
+		}
+		std::error_code ec;
+		fileTestRoot = std::filesystem::canonical(fileTestRoot, ec);
+		if (ec || !std::filesystem::is_directory(fileTestRoot, ec)) {
+			std::wcerr << L"[!] File test ROOT must be an existing directory.\n";
+			return 1;
+		}
+		probePath = fileTestRoot / L"bin" / L"zis_probe.exe";
+		if (!std::filesystem::is_regular_file(probePath, ec)) {
+			std::wcerr << L"[!] File probe not found: " << probePath.wstring() << L"\n";
+			return 1;
+		}
+		if (nativeFileMode)
+			return RunNativeFileTest(mode, fileTestRoot, probePath, fileOptions);
 	}
 
 	if (mode == LaunchMode::PsecProbe)
@@ -845,28 +1222,30 @@ int wmain(int argc, wchar_t **argv)
 
 	std::wcout << L"[+] AppContainer SID: " << appSidString << L"\n";
 
-	HDESK originalDesktop = OpenInputDesktop(0, FALSE, DESKTOP_SWITCHDESKTOP);
-
-	if (!originalDesktop) {
-		PrintWin32Error(L"OpenInputDesktop");
-		FreeSid(appSid);
-		return 1;
+	HDESK originalDesktop = nullptr;
+	if (!fileOptions.noUi) {
+		originalDesktop = OpenInputDesktop(0, FALSE, DESKTOP_SWITCHDESKTOP);
+		if (!originalDesktop) {
+			PrintWin32Error(L"OpenInputDesktop");
+			FreeSid(appSid);
+			return 1;
+		}
 	}
 
 	HDESK sandboxDesktop =
 		CreateLowIntegrityDesktop(userSidString, appSidString, mode == LaunchMode::Psec);
 
 	if (!sandboxDesktop) {
-		CloseDesktop(originalDesktop);
+		if (originalDesktop) CloseDesktop(originalDesktop);
 		FreeSid(appSid);
 		return 1;
 	}
 
 	std::wcout << L"[+] Created desktop: WinSta0\\" << kDesktopName << L"\n";
 
-	std::filesystem::path probePath;
-
-	if (mode == LaunchMode::Psec) {
+	if (!fileTestRoot.empty()) {
+		std::wcout << L"[+] Classic file probe: " << probePath.wstring() << L"\n";
+	} else if (mode == LaunchMode::Psec) {
 
 		probePath = GetSiblingProbe();
 
@@ -875,7 +1254,7 @@ int wmain(int argc, wchar_t **argv)
 			std::wcerr << L"[!] zis_probe.exe not found.\n";
 
 			CloseDesktop(sandboxDesktop);
-			CloseDesktop(originalDesktop);
+			if (originalDesktop) CloseDesktop(originalDesktop);
 			FreeSid(appSid);
 
 			return 1;
@@ -887,7 +1266,7 @@ int wmain(int argc, wchar_t **argv)
 
 		if (!CopyProbeIntoAppContainer(appSidString, probePath)) {
 			CloseDesktop(sandboxDesktop);
-			CloseDesktop(originalDesktop);
+			if (originalDesktop) CloseDesktop(originalDesktop);
 			FreeSid(appSid);
 
 			return 1;
@@ -908,7 +1287,7 @@ int wmain(int argc, wchar_t **argv)
 				   << L"CreateProcessW + "
 					  L"PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES\n\n";
 
-		launched = LaunchAppContainerOnDesktop(appSid, probePath, pi);
+		launched = LaunchAppContainerOnDesktop(appSid, probePath, pi, fileTestRoot, fileOptions.noUi);
 		break;
 
 	case LaunchMode::Experimental:
@@ -925,7 +1304,8 @@ int wmain(int argc, wchar_t **argv)
 				   << L"CreateProcessSecurityEnvironment +\n"
 				   << L"PROC_THREAD_ATTRIBUTE_SECURITY_ENVIRONMENT\n\n";
 
-		launched = LaunchPsecOnDesktop(probePath, pi, psecContext);
+		launched = LaunchPsecOnDesktop(probePath, pi, psecContext, {}, nullptr,
+									   fileOptions.noFilesystemPolicy);
 
 		break;
 	}
@@ -934,34 +1314,43 @@ int wmain(int argc, wchar_t **argv)
 		std::wcerr << L"[!] Process launch failed.\n";
 
 		CloseDesktop(sandboxDesktop);
-		CloseDesktop(originalDesktop);
+		if (originalDesktop) CloseDesktop(originalDesktop);
 		FreeSid(appSid);
 
 		return 1;
 	}
 
+	const DWORD timeoutMs = fileTestRoot.empty() ? 30'000 : 300'000;
 	std::wcout << L"[+] Child PID: " << pi.dwProcessId << L"\n"
-			   << L"[+] Switching to the ZIS desktop for up to 30 seconds...\n";
+			   << (fileOptions.noUi ? L"[+] Waiting without input Desktop switching for up to " :
+				   L"[+] Switching to the ZIS desktop for up to ") << timeoutMs / 1000
+			   << L" seconds...\n";
 
-	if (!::SwitchDesktop(sandboxDesktop)) {
+	const bool switched = fileOptions.noUi || ::SwitchDesktop(sandboxDesktop) != FALSE;
+	if (!switched) {
 		PrintWin32Error(L"SwitchDesktop(ZIS)");
+		if (!fileTestRoot.empty() && !::TerminateProcess(pi.hProcess, 0xDEAD))
+			PrintWin32Error(L"TerminateProcess(file test after switch failure)");
 	}
 
-	const DWORD wait = ::WaitForSingleObject(pi.hProcess, 30'000);
+	const DWORD wait = ::WaitForSingleObject(pi.hProcess, timeoutMs);
+	const DWORD waitError = wait == WAIT_FAILED ? ::GetLastError() : ERROR_SUCCESS;
 
-	// Always return the user to the original input desktop.
-	if (!::SwitchDesktop(originalDesktop))
+	// Restore the original input desktop only when the interactive path captured it.
+	const bool restored = !originalDesktop || ::SwitchDesktop(originalDesktop) != FALSE;
+	if (!restored)
 		PrintWin32Error(L"SwitchDesktop(original)");
 
 	if (wait == WAIT_TIMEOUT) {
-		std::wcerr << L"[!] Probe timed out after 30 seconds; terminating it.\n";
+		std::wcerr << L"[!] Probe timed out after " << timeoutMs / 1000
+				   << L" seconds; terminating it.\n";
 
 		::TerminateProcess(pi.hProcess, 0xDEAD);
 
 		// Wait while hProcess is still valid.
 		::WaitForSingleObject(pi.hProcess, 5000);
 	} else if (wait == WAIT_FAILED) {
-		PrintWin32Error(L"WaitForSingleObject");
+		PrintWin32Error(L"WaitForSingleObject", waitError);
 
 		::TerminateProcess(pi.hProcess, 0xDEAD);
 		::WaitForSingleObject(pi.hProcess, 5000);
@@ -969,8 +1358,12 @@ int wmain(int argc, wchar_t **argv)
 
 	DWORD exitCode = 0;
 
-	if (::GetExitCodeProcess(pi.hProcess, &exitCode)) {
-		std::wcout << L"[+] Probe exit code: " << exitCode << L"\n";
+	const bool haveExitCode = ::GetExitCodeProcess(pi.hProcess, &exitCode) != FALSE;
+	if (haveExitCode) {
+		std::wcout << L"[+] Probe exit code: " << exitCode << L" / 0x" << std::hex
+				   << exitCode << std::dec << L"\n";
+	} else if (!fileTestRoot.empty()) {
+		PrintWin32Error(L"GetExitCodeProcess(file test)");
 	}
 
 	// Environment must outlive the child.
@@ -983,12 +1376,15 @@ int wmain(int argc, wchar_t **argv)
 	::CloseHandle(pi.hThread);
 	::CloseHandle(pi.hProcess);
 	::CloseDesktop(sandboxDesktop);
-	::CloseDesktop(originalDesktop);
+	if (originalDesktop) ::CloseDesktop(originalDesktop);
 	::FreeSid(appSid);
 
 	std::wcout << L"\nDone.\n"
 			   << L"To remove the profile later:\n"
 			   << L"  zis_launcher.exe --cleanup\n";
 
-	return 0;
+	if (!switched || !restored || wait != WAIT_OBJECT_0 || !haveExitCode)
+		return 1;
+
+	return static_cast<int>(exitCode);
 }

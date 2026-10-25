@@ -11,6 +11,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
+    <SolutionDir Condition="'$(SolutionDir)'=='' or '$(SolutionDir)'=='*Undefined*'">$(MSBuildThisFileDirectory)..\</SolutionDir>
     <VCProjectVersion>18.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{61f81e14-e221-42fb-8b52-b9b99458abe1}</ProjectGuid>
@@ -45,7 +46,7 @@
     <Import Project="$(SolutionDir)props\ThirdParty.props" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+  <PropertyGroup>
     <OutDir>$(SolutionDir).output\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir).intermediate\$(ProjectName)\$(Configuration)\</IntDir>
   </PropertyGroup>

@@ -114,8 +114,16 @@ namespace
 
 } // namespace
 
-int wmain()
+int RunFileProbe(int argc, wchar_t** argv);
+
+int wmain(int argc, wchar_t** argv)
 {
+	if (argc > 1) {
+		if (::wcscmp(argv[1], L"--file-test") == 0)
+			return RunFileProbe(argc - 1, argv + 1);
+		return 64;
+	}
+
 	const bool appContainer = IsAppContainer();
 	const DWORD integrity = GetIntegrityRid();
 
